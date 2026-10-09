@@ -17,6 +17,11 @@ var msg_label: Label
 var hint_label: Label
 var pause_panel: Control
 var results_panel: Control
+var lapinfo_label: Label
+var sector_label: Label
+var lights_box: HBoxContainer
+var _lights: Array[Panel] = []
+var _sector_tween: Tween
 var _msg_tween: Tween
 var race_mode := true
 
@@ -35,6 +40,34 @@ func _ready() -> void:
 	lap_label = UI.label("", 34)
 	lap_label.position = Vector2(34, 92)
 	root.add_child(lap_label)
+
+	lapinfo_label = UI.label("", 28, Color("cfe6ff"))
+	lapinfo_label.position = Vector2(34, 138)
+	root.add_child(lapinfo_label)
+	sector_label = UI.label("", 40, Color("6dff8a"))
+	sector_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	sector_label.position = Vector2(-150, 74)
+	sector_label.custom_minimum_size = Vector2(300, 0)
+	sector_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sector_label.modulate.a = 0.0
+	root.add_child(sector_label)
+	lights_box = HBoxContainer.new()
+	lights_box.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	lights_box.position = Vector2(-190, 130)
+	lights_box.add_theme_constant_override("separation", 16)
+	lights_box.visible = false
+	for i in 5:
+		var pnl := Panel.new()
+		pnl.custom_minimum_size = Vector2(60, 60)
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color("2a0a0a")
+		sb.set_corner_radius_all(30)
+		sb.border_color = Color("111111")
+		sb.set_border_width_all(5)
+		pnl.add_theme_stylebox_override("panel", sb)
+		lights_box.add_child(pnl)
+		_lights.append(pnl)
+	root.add_child(lights_box)
 
 	time_label = UI.label("0:00.00", 44)
 	time_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -139,6 +172,25 @@ func set_place(place: int, total: int) -> void:
 func set_lap(lap: int, total: int) -> void:
 	lap_label.text = "Lap %d / %d" % [lap, total]
 
+func set_lapinfo(text: String) -> void:
+	lapinfo_label.text = text
+
+func set_sector(text: String, purple: bool) -> void:
+	sector_label.text = text
+	sector_label.add_theme_color_override("font_color", Color("d68bff") if purple else Color("ffe14a"))
+	if _sector_tween:
+		_sector_tween.kill()
+	sector_label.modulate.a = 1.0
+	_sector_tween = create_tween()
+	_sector_tween.tween_property(sector_label, "modulate:a", 0.0, 0.4).set_delay(2.0)
+
+## n lit red lights (0..5); n < 0 hides the gantry. After GO call with -1.
+func set_start_lights(n: int) -> void:
+	lights_box.visible = n >= 0
+	for i in _lights.size():
+		var sb: StyleBoxFlat = _lights[i].get_theme_stylebox("panel")
+		sb.bg_color = Color("ff2222") if i < n else Color("2a0a0a")
+
 func set_time(t: float) -> void:
 	time_label.text = UI.format_time(t)
 
@@ -175,6 +227,9 @@ func show_results(info: Dictionary) -> void:
 	v.add_theme_constant_override("separation", 10)
 	panel.add_child(v)
 	var place: int = info["place"]
+	if info.get("circuit", false):
+		_show_podium(info)
+		return
 	var heading := "You win!" if place == 1 else ("Great race!" if place <= 3 else "Nice try!")
 	var t := UI.label(heading, 64, Color("ffe14a"))
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -187,6 +242,73 @@ func show_results(info: Dictionary) -> void:
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		v.add_child(l)
 	var reward := UI.label("Stars earned: %d  (total %d)" % [info["stars_earned"], info["stars_total"]], 36, Color("ffd21f"))
+	reward.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(reward)
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 14)
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	buttons.add_child(UI.button("Race Again", func(): restart_requested.emit(), Vector2(280, 76)))
+	buttons.add_child(UI.button("Free Roam", func(): roam_requested.emit(), Vector2(280, 76)))
+	buttons.add_child(UI.button("Menu", func(): menu_requested.emit(), Vector2(220, 76)))
+	v.add_child(buttons)
+	results_panel.visible = true
+
+func _show_podium(info: Dictionary) -> void:
+	var dim: Node = results_panel.get_child(0)
+	var holder: Node = results_panel.get_child(1)
+	var panel: Node = holder.get_child(0)
+	panel.get_child(0).queue_free()
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	panel.add_child(v)
+	var place: int = info["place"]
+	var t := UI.label("PODIUM" if place <= 3 else "Race over", 56, Color("ffe14a"))
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	var rows: Array = info["podium"]
+	var steps := HBoxContainer.new()
+	steps.alignment = BoxContainer.ALIGNMENT_CENTER
+	steps.add_theme_constant_override("separation", 10)
+	var order := [1, 0, 2]
+	var heights := [150.0, 110.0, 80.0]
+	var cols := [Color("d9a521"), Color("aab2bd"), Color("b4713a")]
+	for k in order:
+		if k >= rows.size():
+			continue
+		var col := VBoxContainer.new()
+		col.alignment = BoxContainer.ALIGNMENT_END
+		col.custom_minimum_size = Vector2(190, 215)
+		var nm := UI.label(str(rows[k]["name"]), 28, Color.WHITE if not rows[k]["is_player"] else Color("6dff8a"))
+		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		col.add_child(nm)
+		var block := ColorRect.new()
+		block.color = cols[k]
+		block.custom_minimum_size = Vector2(190, heights[k])
+		var num := UI.label(str(k + 1), 56, Color("2a2a2a"))
+		num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		num.set_anchors_preset(Control.PRESET_CENTER_TOP)
+		block.add_child(num)
+		col.add_child(block)
+		steps.add_child(col)
+	v.add_child(steps)
+	var line := UI.label("You: %s   Time %s%s" % [info["place_text"], UI.format_time(info["time"]), "   NEW BEST!" if info["new_best"] else ""], 32)
+	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(line)
+	var best := UI.label("Your best lap %s%s    Fastest lap %s (%s)" % [UI.format_time(info["best_lap"]), "  NEW!" if info["new_best_lap"] else "", UI.format_time(info["fastest_lap"]), info["fastest_name"]], 26, Color("d68bff"))
+	best.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(best)
+	var lt: Array = info["lap_times"]
+	var parts: PackedStringArray = []
+	for i in lt.size():
+		parts.append("L%d %s" % [i + 1, UI.format_time(lt[i])])
+	var laps_l := UI.label("   ".join(parts), 24, Color("cfe6ff"))
+	laps_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(laps_l)
+	for row in info["standings"]:
+		var l := UI.label(row, 24, Color("cfe6ff"))
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		v.add_child(l)
+	var reward := UI.label("Stars earned: %d  (total %d)" % [info["stars_earned"], info["stars_total"]], 30, Color("ffd21f"))
 	reward.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(reward)
 	var buttons := HBoxContainer.new()

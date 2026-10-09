@@ -53,8 +53,8 @@ func _draw() -> void:
 	var center_world: Vector2
 	var rot := 0.0
 	if full:
-		scale_px = size.x / (world.extent * 2.2)
-		center_world = Vector2.ZERO
+		scale_px = minf(size.x, size.y) / (maxf(world.bounds.size.x, world.bounds.size.y) * 1.05)
+		center_world = world.bounds.get_center()
 	else:
 		scale_px = size.x * 0.5 / RANGE
 		center_world = ppos

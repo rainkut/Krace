@@ -11,6 +11,8 @@ const TREE_MODELS := ["tree_oak", "tree_default", "tree_simple", "tree_fat", "tr
 var world: Dictionary
 var gen: Dictionary
 var extent := 1100.0
+var bounds := Rect2(-1100, -1100, 2200, 2200)
+var township: Township
 var spawn_xz := Vector2.ZERO
 var spawn_dir := Vector2(1, 0)
 var park_center := Vector3.ZERO
@@ -37,6 +39,11 @@ func build(town_data: Dictionary, _reserved: Dictionary = {}) -> void:
 	world = JSON.parse_string(txt)
 	gen = world.get("gen", {})
 	extent = float(world.get("extent", 1100))
+	var bd = world.get("bounds")
+	if bd is Array:
+		bounds = Rect2(float(bd[0]), float(bd[1]), float(bd[2]) - float(bd[0]), float(bd[3]) - float(bd[1]))
+	else:
+		bounds = Rect2(-extent, -extent, extent * 2.0, extent * 2.0)
 	var sp: Array = data.get("spawn_xz", [0, 0])
 	spawn_xz = Vector2(float(sp[0]), float(sp[1]))
 	var sd: Array = data.get("spawn_dir", [1, 0])
@@ -49,7 +56,21 @@ func build(town_data: Dictionary, _reserved: Dictionary = {}) -> void:
 	_col_body.collision_layer = 1
 	_col_body.collision_mask = 0
 	add_child(_col_body)
+	if data.has("township"):
+		var tdata := Township.load_data(str(data["township"]))
+		if not tdata.is_empty():
+			township = Township.new()
+			township.name = "Township"
+			add_child(township)
+			township.setup(self, tdata)
+			township.integrate_gen(gen)
 	_index_roads()
+	if township != null:
+		township.register_roads()
+		if str(Content.launch.get("spawn", "")) == "ashapurna":
+			var sd2: Array = township.spawn_xz_dir()
+			spawn_xz = sd2[0]
+			spawn_dir = sd2[1]
 	_world_ground()
 	_world_areas()
 	_world_roads()
@@ -59,6 +80,8 @@ func build(town_data: Dictionary, _reserved: Dictionary = {}) -> void:
 	_world_landmarks()
 	_world_park()
 	_make_stars()
+	if township != null:
+		township.build()
 
 func _exit_tree() -> void:
 	for b in _bodies:
@@ -242,10 +265,12 @@ func _flat_mat(color: Color, rough := 0.85) -> StandardMaterial3D:
 
 # ------------------------------------------------------------------ ground, landuse, water
 func _world_ground() -> void:
-	var size := (extent + 450.0) * 2.0
+	var size := maxf(bounds.size.x, bounds.size.y) + 900.0
+	var bc := bounds.get_center()
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(size, size)
 	var mi := MeshInstance3D.new()
+	mi.position = Vector3(bc.x, 0.0, bc.y)
 	mi.mesh = plane
 	mi.material_override = _pbr("ground037", 7.0, Color("d8c9a8"))
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -254,17 +279,18 @@ func _world_ground() -> void:
 	var fb := BoxShape3D.new()
 	fb.size = Vector3(size, 2.0, size)
 	floor_shape.shape = fb
-	floor_shape.position.y = 0.08 - 1.0
+	floor_shape.position = Vector3(bc.x, 0.08 - 1.0, bc.y)
 	_col_body.add_child(floor_shape)
-	var lim := extent + 70.0
+	var hx := bounds.size.x * 0.5 + 70.0
+	var hz := bounds.size.y * 0.5 + 70.0
 	for side in 4:
 		var wall := CollisionShape3D.new()
 		var wb := BoxShape3D.new()
 		var horiz := side < 2
-		wb.size = Vector3(lim * 2.0, 14.0, 4.0) if horiz else Vector3(4.0, 14.0, lim * 2.0)
+		wb.size = Vector3(hx * 2.0 + 8.0, 14.0, 4.0) if horiz else Vector3(4.0, 14.0, hz * 2.0 + 8.0)
 		wall.shape = wb
 		var sgn := 1.0 if side % 2 == 0 else -1.0
-		wall.position = Vector3(0.0, 7.0, sgn * (lim + 2.0)) if horiz else Vector3(sgn * (lim + 2.0), 7.0, 0.0)
+		wall.position = Vector3(bc.x, 7.0, bc.y + sgn * (hz + 2.0)) if horiz else Vector3(bc.x + sgn * (hx + 2.0), 7.0, bc.y)
 		_col_body.add_child(wall)
 
 func _fill_polygon(st: SurfaceTool, poly: PackedVector2Array, y: float, uv_scale: float) -> void:

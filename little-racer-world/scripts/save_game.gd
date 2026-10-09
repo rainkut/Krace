@@ -6,6 +6,7 @@ const PATH := "user://save.json"
 var selected_car := "sunny_hatch"
 var paints := {}        # vehicle id -> paint index
 var best_times := {}    # race id -> seconds
+var best_laps := {}     # race id -> best single lap (seconds)
 var stars := 0
 var races_finished := 0
 
@@ -27,6 +28,14 @@ func record_race(race_id: String, time_s: float) -> bool:
 	save_game()
 	return is_new_best
 
+func record_lap(race_id: String, lap_s: float) -> bool:
+	var best: float = best_laps.get(race_id, INF)
+	if lap_s < best:
+		best_laps[race_id] = lap_s
+		save_game()
+		return true
+	return false
+
 func load_game() -> void:
 	if not FileAccess.file_exists(PATH):
 		return
@@ -40,6 +49,7 @@ func load_game() -> void:
 	selected_car = str(parsed.get("selected_car", selected_car))
 	paints = parsed.get("paints", {})
 	best_times = parsed.get("best_times", {})
+	best_laps = parsed.get("best_laps", {})
 	stars = int(parsed.get("stars", 0))
 	races_finished = int(parsed.get("races_finished", 0))
 
@@ -51,7 +61,7 @@ func save_game() -> void:
 		return
 	f.store_string(JSON.stringify({
 		"version": 1, "selected_car": selected_car, "paints": paints,
-		"best_times": best_times, "stars": stars, "races_finished": races_finished,
+		"best_times": best_times, "best_laps": best_laps, "stars": stars, "races_finished": races_finished,
 	}, "  "))
 	f.close()
 	DirAccess.rename_absolute(tmp, PATH)
@@ -60,6 +70,7 @@ func wipe() -> void:
 	selected_car = "sunny_hatch"
 	paints = {}
 	best_times = {}
+	best_laps = {}
 	stars = 0
 	races_finished = 0
 	save_game()

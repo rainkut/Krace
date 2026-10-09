@@ -39,6 +39,7 @@ var _last_gate_idx := -1
 var osm: OsmWorld
 var traffic: TrafficManager
 var minimap: MapView
+var circuit: CircuitRace
 var _off_t := 0.0
 var _recover_cd := 0.0
 
@@ -60,6 +61,9 @@ func _ready() -> void:
 		Look.add_to(self, Settings.shadows, 150.0)
 	else:
 		_build_environment()
+	if mode == "race" and race.has("circuit") and not town_data.has("township"):
+		race = {}
+		mode = "roam"
 	_prepare_route(town_data)
 	if is_osm:
 		osm = OsmWorld.new()
@@ -68,6 +72,8 @@ func _ready() -> void:
 		town = Town.new()
 	add_child(town)
 	town.build(town_data, route_cells)
+	if mode == "race" and race.has("circuit"):
+		_setup_circuit()
 	_spawn_vehicles(town_data)
 	_build_markers()
 	_build_stars()
@@ -77,6 +83,7 @@ func _ready() -> void:
 	add_child(cam)
 	cam.current = true
 	cam.snap_to_target()
+	_debug_camera()
 	hud = HUD.new()
 	add_child(hud)
 	hud.set_mode(mode == "race")
@@ -101,6 +108,10 @@ func _ready() -> void:
 	if mode == "race":
 		_set_frozen(true)
 		state = "countdown"
+		if circuit != null:
+			_countdown = 5.4
+			hud.set_start_lights(0)
+			hud.set_lapinfo("Best --   Last --")
 		hud.set_lap(1, laps)
 		hud.set_place(_place_of(_player_racer), racers.size())
 	else:
@@ -155,6 +166,9 @@ func _prepare_route(town_data: Dictionary) -> void:
 	if mode != "race":
 		return
 	laps = int(race.get("laps", 2))
+	if race.has("circuit"):
+		laps = int(Content.launch.get("laps", race.get("laps", 3)))
+		return
 	gate_every = int(race.get("gate_every", 8))
 	if race.has("route_xz"):
 		var pts: Array = race["route_xz"]
@@ -195,6 +209,9 @@ func _make_vehicle(vehicle_id: String, paint: int) -> Vehicle:
 func _spawn_vehicles(town_data: Dictionary) -> void:
 	var car_id: String = Save.selected_car
 	var def := Content.get_vehicle(car_id)
+	if circuit != null and str(def.get("class", "")) != str(race.get("require_class", "racer")):
+		car_id = "gp_racer"
+		def = Content.get_vehicle(car_id)
 	if not Save.is_unlocked(def):
 		car_id = "sunny_hatch"
 		def = Content.get_vehicle(car_id)
@@ -210,6 +227,9 @@ func _spawn_vehicles(town_data: Dictionary) -> void:
 	if mode == "race":
 		spawn_pos = route[0]
 		spawn_dir = (route[1] - route[0]).normalized()
+	if circuit != null:
+		_spawn_circuit_grid()
+		return
 	var right := Vector3(-spawn_dir.z, 0, spawn_dir.x)
 	var slots := [[0, -1], [0, 1], [1, -1], [1, 1]]
 	var yaw := atan2(-spawn_dir.x, -spawn_dir.z)
@@ -236,6 +256,68 @@ func _spawn_vehicles(town_data: Dictionary) -> void:
 	if autodrive:
 		_attach_ai(_player_racer, 0.97, 0.0)
 
+func _setup_circuit() -> void:
+	circuit = CircuitRace.new()
+	add_child(circuit)
+	var c: Dictionary = osm.township.d["circuit"]
+	circuit.setup(self, osm.township.circuit_world(), laps, c.get("sector_indices", [115, 239]), float(race.get("corner_g", 24.0)))
+	route = circuit.pts
+	circuit.lap_done.connect(_on_lap_done)
+	circuit.racer_finished.connect(_on_circuit_finished)
+
+func _new_racer(rname: String, v: Vehicle, is_player: bool) -> Dictionary:
+	return {"name": rname, "vehicle": v, "count": 0, "frac": 0.0, "progress": 0.0, "finished": false, "finish_time": 0.0, "is_player": is_player}
+
+func _attach_circuit_ai(r: Dictionary, skill: float, lane: float) -> CircuitDriver:
+	var d := CircuitDriver.new()
+	d.car = r["vehicle"]
+	d.circuit = circuit
+	d.racer = r
+	d.skill = skill
+	d.lane = lane
+	r["driver"] = d
+	add_child(d)
+	return d
+
+func _spawn_circuit_grid() -> void:
+	var tw := osm.township
+	player.transform = tw.grid_transform(2)
+	_player_racer = _new_racer("You", player, true)
+	racers.append(_player_racer)
+	var ai_slots := [0, 1, 3, 4]
+	var opponents: Array = race.get("opponents", [])
+	for i in mini(opponents.size(), ai_slots.size()):
+		var o: Dictionary = opponents[i]
+		var v := _make_vehicle(str(o["vehicle"]), int(o.get("paint", 0)))
+		v.transform = tw.grid_transform(ai_slots[i])
+		var r := _new_racer(str(o["name"]), v, false)
+		racers.append(r)
+		_attach_circuit_ai(r, float(o.get("skill", 0.92)), float(o.get("lane", 0.0)))
+	if autodrive:
+		_attach_circuit_ai(_player_racer, 0.97, 0.0)
+	for r in racers:
+		circuit.init_racer(r)
+
+func _on_lap_done(r: Dictionary, lap_time: float, is_best: bool) -> void:
+	if not r["is_player"]:
+		return
+	var done: int = r["laps_done"]
+	if done < laps:
+		hud.set_lap(done + 1, laps)
+		hud.show_message("Lap %d!" % (done + 1), 1.0, Color("6dff8a"))
+		Sfx.play("ding")
+	hud.set_lapinfo("Best %s   Last %s" % [UI.format_time(r["best_lap"]), UI.format_time(lap_time)])
+	if is_best and done > 1:
+		hud.set_sector("BEST LAP!", true)
+
+func _on_circuit_finished(r: Dictionary) -> void:
+	if r["is_player"]:
+		_circuit_player_finished()
+	else:
+		var d = r.get("driver")
+		if d != null:
+			d.cool_down = true
+
 func _attach_ai(r: Dictionary, skill: float, lane: float) -> void:
 	var d := AIDriver.new()
 	d.car = r["vehicle"]
@@ -247,7 +329,7 @@ func _attach_ai(r: Dictionary, skill: float, lane: float) -> void:
 	add_child(d)
 
 func _build_markers() -> void:
-	if mode != "race":
+	if mode != "race" or circuit != null:
 		return
 	gate = Node3D.new()
 	var ring := MeshInstance3D.new()
@@ -352,7 +434,21 @@ func _process(dt: float) -> void:
 		if is_instance_valid(n):
 			n.rotation.y += dt * 2.4
 			n.position.y = 1.7 + sin(t * 2.0 + n.position.x) * 0.2
-	if state == "countdown":
+	if state == "countdown" and circuit != null:
+		_countdown -= dt
+		var lit := clampi(int((5.4 - _countdown) / 0.9), 0, 5)
+		if lit != _last_count_shown:
+			_last_count_shown = lit
+			hud.set_start_lights(lit)
+			Sfx.play("beep", 0.8)
+		if _countdown <= 0.0:
+			hud.set_start_lights(-1)
+			hud.show_message("GO!", 0.9, Color("6dff8a"))
+			Sfx.play("go")
+			_set_frozen(false)
+			state = "racing"
+			race_time = 0.0
+	elif state == "countdown":
 		_countdown -= dt
 		var shown := ceili(_countdown - 0.5)
 		if shown != _last_count_shown and shown >= 0:
@@ -385,7 +481,10 @@ func _physics_process(dt: float) -> void:
 	_collect_stars()
 	if osm != null:
 		_check_recovery(dt)
-	if mode == "race" and state != "countdown":
+	if circuit != null and state != "countdown":
+		circuit.physics(dt)
+		hud.set_place(_place_of(_player_racer), racers.size())
+	elif mode == "race" and state != "countdown":
 		for r in racers:
 			_update_racer(r)
 		_update_markers(dt)
@@ -394,8 +493,9 @@ func _physics_process(dt: float) -> void:
 
 func _drive_player(dt: float) -> void:
 	if state == "finished":
-		player.throttle = 0.0
-		player.steer = 0.0
+		if circuit == null:
+			player.throttle = 0.0
+			player.steer = 0.0
 		return
 	var br := Input.get_action_strength("brake")
 	var th := Input.get_action_strength("accelerate")
@@ -563,6 +663,68 @@ func _player_finished() -> void:
 	if is_inside_tree():
 		hud.show_results(info)
 
+func _circuit_player_finished() -> void:
+	state = "finished"
+	Sfx.play("fanfare")
+	hud.show_message("CHEQUERED FLAG!", 2.2, Color("6dff8a"))
+	hud.set_hint("")
+	var r := _player_racer
+	if r.get("driver") == null:
+		_attach_circuit_ai(r, 0.6, 0.0)
+	else:
+		r["driver"].skill = 0.6
+		r["driver"].cool_down = true
+	var place: int = int(r["finish_order"]) + 1
+	var t: float = r["finish_time"]
+	var rewards: Dictionary = race.get("rewards", {})
+	var bonus := int(rewards.get(str(place), 0))
+	Save.stars += bonus
+	var new_best := Save.record_race("%s_L%d" % [race["id"], laps], t)
+	var new_lap := Save.record_lap(str(race["id"]), r["best_lap"])
+	var waited := 0.0
+	while waited < 14.0 and racers.any(func(x): return not x["finished"]) and is_inside_tree():
+		await get_tree().create_timer(0.25).timeout
+		waited += 0.25
+	if not is_inside_tree():
+		return
+	var order := _sorted_racers()
+	var rows: Array = []
+	var podium: Array = []
+	for i in order.size():
+		var x: Dictionary = order[i]
+		var t_text := UI.format_time(x["finish_time"]) if x["finished"] else "DNF"
+		rows.append("%d.  %s%s   %s   best lap %s" % [i + 1, x["name"], "  (you)" if x["is_player"] else "", t_text, UI.format_time(x["best_lap"]) if x["best_lap"] < INF else "--"])
+		podium.append({"name": x["name"], "is_player": x["is_player"], "time": x["finish_time"]})
+	var info := {
+		"circuit": true, "place": place, "place_text": _ordinal(place), "time": t, "new_best": new_best,
+		"standings": rows, "podium": podium, "lap_times": r["lap_times"], "best_lap": r["best_lap"],
+		"new_best_lap": new_lap, "fastest_lap": circuit.best_lap, "fastest_name": circuit.best_lap_name,
+		"sector_times": r["sec_times"], "laps": laps,
+		"stars_earned": stars_collected + bonus, "stars_total": Save.stars,
+	}
+	hud.set_stars(Save.stars)
+	race_finished.emit(info)
+	await get_tree().create_timer(1.2).timeout
+	if is_inside_tree():
+		hud.show_results(info)
+
+func _debug_camera() -> void:
+	var c = Content.launch.get("cam")
+	if not (c is Dictionary) or osm == null or osm.township == null:
+		return
+	cam.set_physics_process(false)
+	cam.set_process(false)
+	var tw := osm.township
+	var pos: Array = c["pos"]
+	var look: Array = c["look"]
+	cam.fov = float(c.get("fov", 70.0))
+	cam.global_position = tw.world3(float(pos[0]), float(pos[2]), float(pos[1]))
+	var tgt := tw.world3(float(look[0]), float(look[2]), float(look[1]))
+	var up := Vector3.UP
+	if absf(float(pos[1]) - float(look[1])) > 0.9 * Vector2(float(pos[0]) - float(look[0]), float(pos[2]) - float(look[2])).length():
+		up = Vector3(tw.N.x, 0, tw.N.y)
+	cam.look_at(tgt, up)
+
 func _ordinal(n: int) -> String:
 	if n == 1: return "1st"
 	if n == 2: return "2nd"
@@ -573,7 +735,9 @@ func _reset_player() -> void:
 	if state == "finished":
 		return
 	var xf: Transform3D
-	if mode == "race":
+	if circuit != null:
+		xf = circuit.reset_pose(_player_racer)
+	elif mode == "race":
 		var n := route.size()
 		var c: int = int(_player_racer["count"])
 		var a := route[maxi(c - 1, 0) % n] if c > 0 else route[0] - (route[1] - route[0]).normalized() * GRID_BACK
@@ -592,7 +756,7 @@ func _reset_player() -> void:
 
 # ---------------------------------------------------------------- Sheoganj extras
 func _setup_osm_extras() -> void:
-	if Settings.traffic > 0:
+	if Settings.traffic > 0 and int(race.get("traffic", 1)) > 0:
 		traffic = TrafficManager.new()
 		add_child(traffic)
 		traffic.setup(osm, player, int(Settings.TRAFFIC_COUNT[Settings.traffic]))
@@ -603,7 +767,10 @@ func _setup_osm_extras() -> void:
 	minimap.player = player
 	minimap.route = route
 	if mode == "race":
-		minimap.targets_fn = func(): return route[int(_player_racer["count"]) % route.size()]
+		if circuit != null:
+			minimap.targets_fn = func(): return circuit.next_checkpoint_pos(_player_racer)
+		else:
+			minimap.targets_fn = func(): return route[int(_player_racer["count"]) % route.size()]
 	layer.add_child(minimap)
 	add_child(layer)
 
@@ -643,7 +810,10 @@ func _restart() -> void:
 	get_tree().reload_current_scene()
 
 func _to_roam() -> void:
-	Content.launch = {"mode": "roam"}
+	var l := {"mode": "roam", "town": str(race.get("town", Content.launch.get("town", "sunnyvale")))}
+	if circuit != null:
+		l["spawn"] = "ashapurna"
+	Content.launch = l
 	_restart()
 
 func _to_menu() -> void:

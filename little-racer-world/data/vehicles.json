@@ -76,13 +76,14 @@
    "model": "res://assets/kenney/cars/race.glb",
    "model_scale": 1.9,
    "model_yaw": 180,
-   "max_speed": 38,
-   "accel": 18,
-   "handling": 0.9,
-   "grip": 8,
+   "max_speed": 44,
+   "accel": 20,
+   "handling": 1.05,
+   "grip": 13,
    "unlock_stars": 12,
    "default_paint": 5,
-   "blurb": "Super fast! Takes a steady hand."
+   "blurb": "Super fast! Takes a steady hand.",
+   "class": "racer"
   },
   {
    "id": "bruno_suv",
@@ -216,13 +217,30 @@
    "model": "res://assets/kenney/cars/sedan-sports.glb",
    "model_scale": 1.75,
    "model_yaw": 180,
-   "max_speed": 38,
-   "accel": 18,
-   "handling": 1.1,
-   "grip": 10,
+   "max_speed": 42,
+   "accel": 19,
+   "handling": 1.15,
+   "grip": 12,
    "unlock_stars": 90,
    "default_paint": 8,
-   "blurb": "Low, fast and fun."
+   "blurb": "Low, fast and fun.",
+   "class": "racer"
+  },
+  {
+   "id": "gp_racer",
+   "name": "Comet GP",
+   "model": "res://assets/kenney/cars/race.glb",
+   "procedural": "open_wheel",
+   "model_scale": 1.75,
+   "model_yaw": 180,
+   "max_speed": 46,
+   "accel": 22,
+   "handling": 1.15,
+   "grip": 15,
+   "unlock_stars": 0,
+   "class": "racer",
+   "default_paint": 0,
+   "blurb": "An open-wheel racer built for the Grand Prix. Grippy and fast!"
   }
  ]
 }

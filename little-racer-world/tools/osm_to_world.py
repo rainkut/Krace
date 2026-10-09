@@ -14,7 +14,7 @@ for e in raw:
     if e["type"] == "way" and "geometry" in e:
         pts = [proj(g["lat"], g["lon"]) for g in e["geometry"]]
         ids = e.get("nodes", [])
-        keep = [i for i, q in enumerate(pts) if abs(q[0]) <= 1150 and abs(q[1]) <= 1150]
+        keep = [i for i, q in enumerate(pts) if -2100 <= q[0] <= 1150 and abs(q[1]) <= 1150]
         if "highway" in t and len(keep) >= 2:
             lo, hi = keep[0], keep[-1]
             pts = pts[lo:hi + 1]; ids = ids[lo:hi + 1]

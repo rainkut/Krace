@@ -155,6 +155,8 @@ func _build_ui() -> void:
 	for p in pages.values():
 		ui_root.add_child(p)
 
+var gp_laps := 3
+
 func _left_column(content: Control, width := 440.0) -> Control:
 	var panel := PanelContainer.new()
 	panel.position = Vector2(40, 150)
@@ -181,12 +183,29 @@ func _page_play() -> Control:
 		var txt := "%s\n%s  -  %d lap%s%s" % [r["name"], town_name, int(r.get("laps", 1)), "" if int(r.get("laps", 1)) == 1 else "s", ("  -  best " + UI.format_time(best)) if best > 0.0 else ""]
 		v.add_child(UI.button(txt, func():
 			Content.launch = {"mode": "race", "race_id": r["id"]}
+			if r.has("lap_options"):
+				Content.launch["laps"] = gp_laps
 			get_tree().change_scene_to_file("res://scenes/game.tscn"), Vector2(420, 96)))
+		if r.has("lap_options"):
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 8)
+			row.add_child(UI.label("Laps:", 28))
+			for lo in r["lap_options"]:
+				var n: int = int(lo)
+				var b := UI.button(str(n), func():
+					gp_laps = n
+					show_page("play"), Vector2(88, 64))
+				b.modulate = Color("ffe14a") if n == gp_laps else Color.WHITE
+				row.add_child(b)
+			v.add_child(row)
 	for t in Content.towns.values():
 		var tid: String = t["id"]
 		v.add_child(UI.button("Free Roam: " + str(t.get("name", tid)), func():
 			Content.launch = {"mode": "roam", "town": tid}
 			get_tree().change_scene_to_file("res://scenes/game.tscn"), Vector2(420, 76)))
+	v.add_child(UI.button("Free Roam: Ashapurna Township", func():
+		Content.launch = {"mode": "roam", "town": "sheoganj", "spawn": "ashapurna"}
+		get_tree().change_scene_to_file("res://scenes/game.tscn"), Vector2(420, 76)))
 	v.add_child(UI.button("Back", func(): show_page("main"), Vector2(360, 64)))
 	var sc := ScrollContainer.new()
 	sc.custom_minimum_size = Vector2(470, 520)

@@ -51,7 +51,7 @@ func _load_pack(data_dir: String, root: String) -> void:
 	var r = _read_json(data_dir + "/races.json")
 	if typeof(r) == TYPE_DICTIONARY:
 		for e in r.get("races", []):
-			if e is Dictionary and e.has("id") and (e.has("route") or e.has("route_xz")) and e.has("town"):
+			if e is Dictionary and e.has("id") and (e.has("route") or e.has("route_xz") or e.has("circuit")) and e.has("town"):
 				_merge_by_id(races, e)
 			else:
 				push_warning("Skipping invalid race entry in %s" % data_dir)

@@ -1,6 +1,7 @@
 # Roadmap
 
 ## Done
+- Phase 3a: Ashapurna Township (to-scale, anchored to real pin) + Ashapurna Grand Prix circuit race, Comet GP car (v0.3.0).
 - **Phase 1** — playable loop: one town, one race, 4 cars, touch controls, save, procedural sound.
 - **Phase 2** — real OSM Sheoganj world, 3 new races, 9 more vehicles, traffic, stunt park, minimap/full map, auto-recovery, realism pass.
 

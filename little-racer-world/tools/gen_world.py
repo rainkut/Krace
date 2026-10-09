@@ -12,6 +12,9 @@ random.seed(20261009)
 W = json.load(open("data/osm/sheoganj_world.json"))
 W.pop("gen", None)
 EXT = 1100.0
+BOUNDS = (-2100.0, -1150.0, 1150.0, 1150.0)   # xmin, zmin, xmax, zmax - the east town plus the Ashapurna disc to the west
+PIN = (-1241.0, 315.0)
+def out_of_bounds(x, z): return x < BOUNDS[0] or x > BOUNDS[2] or z < BOUNDS[1] or z > BOUNDS[3]
 roads = [r for r in W["roads"] if r["c"] != "track"]
 
 # ---------------- road segment index ----------------
@@ -241,10 +244,10 @@ for r in order:
             nx, nz = -tz * side, tx * side
             setback = 2.2 + (random.random() * 1.2 if not main else random.random() * 0.4)
             cx, cz = x + nx * (hw + setback + d / 2), z + nz * (hw + setback + d / 2)
-            rr = math.hypot(cx, cz)
+            rr = min(math.hypot(cx, cz), 520 + math.hypot(cx - PIN[0], cz - PIN[1]) * 0.7)
             keep = 1.0 if rr < 520 else max(0.12, 1.0 - (rr - 520) / 560)
             tries += 1
-            if abs(cx) > EXT or abs(cz) > EXT or random.random() > keep or in_open_land(cx, cz):
+            if out_of_bounds(cx, cz) or random.random() > keep or in_open_land(cx, cz):
                 s += 4.0; continue
             yaw = math.atan2(-nx, -nz)
             rect = make_rect(cx, cz, yaw, w, d)
@@ -265,7 +268,7 @@ print("buildings", len(bld), "from", tries, "tries")
 # ---------------- trees ----------------
 trees = []   # [x, z, scale, kind, collide]
 def tree_ok(px, pz):
-    if abs(px) > EXT or abs(pz) > EXT or blocked_land(px, pz): return False
+    if out_of_bounds(px, pz) or blocked_land(px, pz): return False
     if edge_dist(px, pz) < 2.2 or near_rect(px, pz, 1.2): return False
     return True
 for r in roads:
@@ -289,7 +292,7 @@ for f in W["areas"]:
         for _ in range(n * 3):
             if n <= 0: break
             px, pz = random.uniform(min(xs), max(xs)), random.uniform(min(zs), max(zs))
-            if in_poly(px, pz, f["p"]) and tree_ok(px, pz) and math.hypot(px, pz) < 1000:
+            if in_poly(px, pz, f["p"]) and tree_ok(px, pz) and (math.hypot(px, pz) < 1000 or math.hypot(px - PIN[0], pz - PIN[1]) < 700):
                 trees.append([round(px, 1), round(pz, 1), round(random.uniform(2.2, 3.4), 2), random.randrange(8), 0]); n -= 1
 trees = trees[:2600]
 print("trees", len(trees))
@@ -315,7 +318,7 @@ for r in roads:
         while s < total - 3:
             x, z, tx, tz = at(spans, s)
             px, pz = x - tz * side * (hw + 1.1), z + tx * side * (hw + 1.1)
-            if edge_dist(px, pz) > 0.3 and not near_rect(px, pz, 0.3) and abs(px) < EXT and abs(pz) < EXT:
+            if edge_dist(px, pz) > 0.3 and not near_rect(px, pz, 0.3) and not out_of_bounds(px, pz):
                 poles.append([round(px, 1), round(pz, 1)])
                 if prev is not None and math.dist(prev, (px, pz)) < 60:
                     wires.append([round(prev[0], 1), round(prev[1], 1), round(px, 1), round(pz, 1)])
@@ -359,6 +362,7 @@ for gx in range(-700, 701, 25):
 print("park", best)
 park = {"x": best[1], "z": best[2], "r": 55} if best else None
 
+W["bounds"] = list(BOUNDS)
 W["gen"] = {"buildings": bld, "landmarks": landmarks, "trees": trees, "poles": poles, "wires": wires,
             "lights": lights, "stars": stars, "park": park}
 json.dump(W, open("data/osm/sheoganj_world.json", "w"), separators=(",", ":"))

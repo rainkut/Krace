@@ -76,6 +76,27 @@ func _process(_dt: float) -> bool:
 		check(game.player.global_position.y > -2.0, "fell off world -> auto-recovered (y=%.1f)" % game.player.global_position.y)
 	elif phase == 4 and not info.is_empty():
 		check(info["place"] >= 1 and info["place"] <= 4, "Sheoganj race finished (place %s, %.0f s)" % [info["place"], info["time"]])
+		var Content = root.get_node("Content")
+		Content.launch = {"mode": "race", "race_id": "ashapurna_gp", "autodrive": true, "laps": 1}
+		info = {}
+		phase = 5
+		frames = 0
+		change_scene_to_file("res://scenes/game.tscn")
+	elif phase == 5 and frames > 40 and current_scene != null and current_scene.get("circuit") != null:
+		game = current_scene
+		game.race_finished.connect(func(i): info = i)
+		_gp_checks()
+		phase = 6
+	elif phase == 6 and not info.is_empty():
+		_gp_results()
+		var Content = root.get_node("Content")
+		Content.launch = {"mode": "roam", "town": "sheoganj", "spawn": "ashapurna"}
+		frames = 0
+		phase = 7
+		change_scene_to_file("res://scenes/game.tscn")
+	elif phase == 7 and frames > 40 and current_scene != null and current_scene.get("osm") != null:
+		game = current_scene
+		check(game.osm.township != null and game.osm.is_road_at(game.osm.spawn_pose().origin), "free-roam Ashapurna spawn is on the road")
 		return _finish()
 	return false
 
@@ -128,6 +149,24 @@ func _osm_checks() -> void:
 	check(game.minimap != null, "minimap created")
 	var rr: PackedVector3Array = w.random_route(w.nearest_node(Vector2(0, 0)), 400.0)
 	check(rr.size() > 10, "traffic random route on real roads (%d pts)" % rr.size())
+
+func _gp_checks() -> void:
+	var w = game.osm
+	check(w != null and w.township != null, "Ashapurna township loaded")
+	var c = game.circuit
+	check(c != null and c.n > 100, "circuit built (%d pts, %.0f m)" % [c.n, c.length])
+	check(w.is_road_at(c.pts[0]) and w.is_road_at(c.pts[c.n / 2]), "circuit points are on road")
+	check(c.cp_idx.size() >= 10, "checkpoints placed (%d)" % c.cp_idx.size())
+	check(game.racers.size() >= 4, "GP grid has %d cars" % game.racers.size())
+	var Content = root.get_node("Content")
+	check(int(Content.get_race("ashapurna_gp").get("laps", 0)) == 3, "GP default laps == 3")
+
+func _gp_results() -> void:
+	check(info.get("circuit", false), "GP shows circuit results")
+	check(info["place"] >= 1 and info["place"] <= 5, "GP place %s" % info["place"])
+	check((info["lap_times"] as Array).size() == 1 and info["best_lap"] > 15.0 and info["best_lap"] < 120.0, "GP lap time sane (%.1f s)" % info["best_lap"])
+	check((info["sector_times"] as Array).size() >= 3, "GP sector splits recorded")
+	check((info["standings"] as Array).size() >= 4, "GP standings")
 
 func _finish() -> bool:
 	Engine.time_scale = 1.0
