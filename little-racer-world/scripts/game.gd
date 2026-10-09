@@ -218,6 +218,7 @@ func _spawn_vehicles(town_data: Dictionary) -> void:
 		car_id = "sunny_hatch"
 		def = Content.get_vehicle(car_id)
 	player = _make_vehicle(car_id, Save.paint_for(car_id, int(def.get("default_paint", 0))), Save.active_parts(car_id))
+	player.add_to_group("crush_cars")
 	var spawn_dir := Vector3(1, 0, 0)
 	var spawn_pos := Vector3.ZERO
 	if osm != null:

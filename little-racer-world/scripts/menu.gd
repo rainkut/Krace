@@ -389,6 +389,18 @@ func _page_settings() -> Control:
 		Settings.save_settings())
 	tr_row.add_child(tb)
 	v.add_child(tr_row)
+	var obs_row := HBoxContainer.new()
+	obs_row.add_child(UI.label("Obstacles", 28))
+	var obb := OptionButton.new()
+	for i in 3:
+		obb.add_item(["Off", "Few", "Normal"][i], i)
+	obb.select(Settings.obstacles)
+	obb.custom_minimum_size = Vector2(200, 56)
+	obb.item_selected.connect(func(i):
+		Settings.obstacles = i
+		Settings.save_settings())
+	obs_row.add_child(obb)
+	v.add_child(obs_row)
 	var gfx_row := HBoxContainer.new()
 	gfx_row.add_theme_constant_override("separation", 14)
 	gfx_row.add_child(UI.label("Graphics", 28))

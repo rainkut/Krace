@@ -3,6 +3,9 @@ extends RefCounted
 ## Everyday Rajasthan small-town street life, built from primitives (no external models):
 ## parked two-wheelers, auto-rickshaws, tempos, handcarts, fruit/veg stalls, water drums, cows and dogs.
 
+## Light props the player's car can knock over (cows, dogs, rickshaws, tempos stay solid / untouched).
+const CRUSH_RADIUS := {"bike": 0.8, "drum": 0.55, "stall": 1.3, "cart": 1.0}
+
 static var _mats := {}
 
 static func _m(c: Color, rough := 0.85, metal := 0.0) -> StandardMaterial3D:
@@ -123,7 +126,7 @@ static func drum() -> ArrayMesh:
 	_part(am, _cyl(0.3, 0.9), Vector3(0, 0.45, 0), _m(Color("2a63a8"), 0.5))
 	return am
 
-static func build(parent: Node3D, roads: Array, rng: RandomNumberGenerator, col_body: StaticBody3D, high: bool, skip := Callable()) -> void:
+static func build(parent: Node3D, roads: Array, rng: RandomNumberGenerator, col_body: StaticBody3D, high: bool, skip := Callable(), level := 2) -> Array:
 	var bike_cols := [Color("1a1a1a"), Color("a82a2a"), Color("2a3f8a"), Color("c9c9c9"), Color("3a3a3a"), Color("6a1f1f")]
 	var kinds := {
 		"bike": [], "rick": [], "tempo": [], "cart": [], "stall": [], "cow": [], "dog": [], "drum": [],
@@ -144,6 +147,12 @@ static func build(parent: Node3D, roads: Array, rng: RandomNumberGenerator, col_
 		for _i in variants[k].size():
 			meshes[k].append([])
 	var every := 6.0 if high else 9.0
+	var thin := RandomNumberGenerator.new()
+	thin.seed = 7731
+	var crushables: Array = []
+	if level <= 0:
+		print("street clutter: off")
+		return crushables
 	for rp in roads:
 		var c: String = rp["c"]
 		if c == "track":
@@ -202,16 +211,20 @@ static func build(parent: Node3D, roads: Array, rng: RandomNumberGenerator, col_
 				if kind != "":
 					var p2 := a + d * t + nrm * off * side
 					var vi: int = rng.randi() % variants[kind].size()
-					var xf := Transform3D(Basis(Vector3.UP, yaw), Vector3(p2.x, 0.12, p2.y))
-					meshes[kind][vi].append(xf)
-					if kind == "cow" or kind == "rick" or kind == "tempo":
-						var sz := Vector3(1.0, 1.4, 1.8) if kind == "cow" else (Vector3(1.4, 1.8, 2.6) if kind == "rick" else Vector3(1.7, 2.2, 4.2))
-						var cs := CollisionShape3D.new()
-						var bs := BoxShape3D.new()
-						bs.size = sz
-						cs.shape = bs
-						cs.transform = Transform3D(Basis(Vector3.UP, yaw), Vector3(p2.x, sz.y * 0.5, p2.y))
-						col_body.add_child(cs)
+					var keep := 1.0
+					if level == 1:
+						keep = 0.25 if (kind == "cow" or kind == "rick" or kind == "tempo") else (0.5 if kind == "dog" else 0.6)
+					if thin.randf() < keep:
+						var xf := Transform3D(Basis(Vector3.UP, yaw), Vector3(p2.x, 0.12, p2.y))
+						meshes[kind][vi].append(xf)
+						if kind == "cow" or kind == "rick" or kind == "tempo":
+							var sz := Vector3(1.0, 1.4, 1.8) if kind == "cow" else (Vector3(1.4, 1.8, 2.6) if kind == "rick" else Vector3(1.7, 2.2, 4.2))
+							var cs := CollisionShape3D.new()
+							var bs := BoxShape3D.new()
+							bs.size = sz
+							cs.shape = bs
+							cs.transform = Transform3D(Basis(Vector3.UP, yaw), Vector3(p2.x, sz.y * 0.5, p2.y))
+							col_body.add_child(cs)
 				t += rng.randf_range(every * 0.4, every * 1.6)
 			next = t - L
 	var cells := {}
@@ -240,4 +253,8 @@ static func build(parent: Node3D, roads: Array, rng: RandomNumberGenerator, col_
 		mmi.visibility_range_end = 320.0 if high else 220.0
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if (high and k != "dog") else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		parent.add_child(mmi)
+		if CRUSH_RADIUS.has(k):
+			for i in xfs.size():
+				crushables.append({"mm": mm, "i": i, "xf": xfs[i], "kind": k, "mesh": variants[k][vi], "alive": true})
 	print("street clutter: ", total, " in ", cells.size(), " chunks")
+	return crushables

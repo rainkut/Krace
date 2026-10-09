@@ -14,6 +14,7 @@ var use_mph := false
 var difficulty := 1  # 0 easy, 1 normal, 2 hard
 var force_touch := false
 var traffic := 2  # 0 off, 1 light, 2 normal, 3 busy
+var obstacles := 1  # street clutter: 0 off, 1 few, 2 normal
 var large_text := false
 var reduced_motion := false
 var simple_steering := false
@@ -71,7 +72,7 @@ func _notification(what: int) -> void:
 func reset_to_defaults() -> void:
 	var keep_mods := disabled_mods
 	sfx_volume = 0.8; auto_accelerate = true; tilt_steering = false; tilt_invert = false; tilt_sensitivity = 1.0
-	shadows = true; use_mph = false; difficulty = 1; force_touch = false; traffic = 2; quality = 0; time_of_day = 1
+	shadows = true; use_mph = false; difficulty = 1; force_touch = false; traffic = 2; obstacles = 1; quality = 0; time_of_day = 1
 	disabled_mods = keep_mods
 	save_settings()
 	apply()
@@ -128,6 +129,7 @@ func load_settings() -> void:
 	use_mph = cf.get_value("game", "use_mph", use_mph)
 	difficulty = clampi(int(cf.get_value("game", "difficulty", difficulty)), 0, 2)
 	traffic = clampi(int(cf.get_value("game", "traffic", traffic)), 0, 3)
+	obstacles = clampi(int(cf.get_value("game", "obstacles", obstacles)), 0, 2)
 	quality = clampi(int(cf.get_value("video", "quality", quality)), 0, 2)
 	time_of_day = clampi(int(cf.get_value("video", "time_of_day", time_of_day)), 0, 3)
 	large_text = bool(cf.get_value("access", "large_text", large_text))
@@ -150,6 +152,7 @@ func save_settings() -> void:
 	cf.set_value("game", "use_mph", use_mph)
 	cf.set_value("game", "difficulty", difficulty)
 	cf.set_value("game", "traffic", traffic)
+	cf.set_value("game", "obstacles", obstacles)
 	cf.set_value("video", "quality", quality)
 	cf.set_value("video", "time_of_day", time_of_day)
 	cf.set_value("access", "large_text", large_text)

@@ -81,7 +81,11 @@ func build(town_data: Dictionary, _reserved: Dictionary = {}) -> void:
 	_world_trees()
 	Compounds.build(self, road_polylines, _rng, _col_body, Settings.quality_level() == 2, func(p): return township != null and township.inside(p, 14.0), gen.get("buildings", []))
 	_world_poles()
-	StreetClutter.build(self, road_polylines, _rng, _col_body, Settings.quality_level() == 2, func(p): return township != null and township.inside(p, 14.0))
+	var crushables := StreetClutter.build(self, road_polylines, _rng, _col_body, Settings.quality_level() == 2, func(p): return township != null and township.inside(p, 14.0), Settings.obstacles)
+	if not crushables.is_empty():
+		var crush := ClutterCrush.new()
+		crush.setup(crushables)
+		add_child(crush)
 	_world_landmarks()
 	_world_park()
 	_make_stars()

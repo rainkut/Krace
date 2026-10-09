@@ -24,6 +24,7 @@ func _ready() -> void:
 	_sounds["fanfare"] = _tone([[523.0, 523.0, 0.14], [659.0, 659.0, 0.14], [784.0, 784.0, 0.14], [1046.0, 1046.0, 0.5]], 0.45)
 	_sounds["horn"] = _tone([[392.0, 392.0, 0.5]], 0.4, 1)
 	_sounds["bump"] = _noise(0.22, 0.6)
+	_sounds["crunch"] = _noise(0.32, 0.75)
 	_sounds["buzz"] = _tone([[200.0, 160.0, 0.25]], 0.4, 1)
 	for i in 6:
 		var p := AudioStreamPlayer.new()
