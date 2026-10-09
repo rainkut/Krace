@@ -24,6 +24,8 @@ static func add_to(parent: Node, shadows: bool, shadow_dist := 140.0) -> void:
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var hdr := "res://assets/sky/%s_%s.hdr" % [SKY_NAMES[clampi(Settings.time_of_day, 0, 3)], "2k" if high else "1k"]
+	if not ResourceLoader.exists(hdr):
+		hdr = hdr.replace("_2k", "_1k")
 	var tex = load(hdr) if ResourceLoader.exists(hdr) else null
 	if tex is Texture2D:
 		var pm := PanoramaSkyMaterial.new()
