@@ -10,6 +10,8 @@ func _initialize() -> void:
 	var scene: String = args[0]
 	var launch = JSON.parse_string(args[1])
 	root.get_node("Content").launch = launch if launch is Dictionary else {}
+	if launch is Dictionary and launch.has("tod"):
+		root.get_node("Settings").time_of_day = int(launch["tod"])
 	for a in args.slice(2):
 		if a.begins_with("scale="):
 			Engine.time_scale = float(a.substr(6))

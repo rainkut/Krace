@@ -10,6 +10,8 @@ const TOD := [
 	[-5.0, -60.0, 0.45, "ff6a3a", "9a86a0", 0.0030, 0.45, 0.50],
 ]
 
+const SKY_NAMES := ["morning", "noon", "evening", "dusk"]
+
 static func add_to(parent: Node, shadows: bool, shadow_dist := 140.0) -> void:
 	var high := Settings.quality_level() == 2
 	var tod: Array = TOD[clampi(Settings.time_of_day, 0, 3)]
@@ -21,12 +23,14 @@ static func add_to(parent: Node, shadows: bool, shadow_dist := 140.0) -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
-	var tex = load("res://assets/sky/sky.hdr") if ResourceLoader.exists("res://assets/sky/sky.hdr") else null
+	var hdr := "res://assets/sky/%s_%s.hdr" % [SKY_NAMES[clampi(Settings.time_of_day, 0, 3)], "2k" if high else "1k"]
+	var tex = load(hdr) if ResourceLoader.exists(hdr) else null
 	if tex is Texture2D:
 		var pm := PanoramaSkyMaterial.new()
 		pm.panorama = tex
 		pm.energy_multiplier = 1.05
 		sky.sky_material = pm
+		sky.radiance_size = Sky.RADIANCE_SIZE_256 if high else Sky.RADIANCE_SIZE_128
 	else:
 		var sm := ProceduralSkyMaterial.new()
 		sm.sky_top_color = Color("2f78d8")
