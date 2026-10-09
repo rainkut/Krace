@@ -1,7 +1,17 @@
-# Little Racer World — Phase 2
+# Little Racer World — Phase 3b
 
-Family-friendly 3D arcade racing in Godot 4.7 (GDScript, `gl_compatibility` renderer, mobile-first).
+Family-friendly 3D arcade racing in Godot 4.7 (GDScript, Mobile (Vulkan) renderer with High/Normal quality, mobile-first).
 Phase 1 = one complete, playable loop. No violence, no gambling, no ads, no network, no permissions.
+
+## Phase 3b: Real building footprints + Mobile renderer (v0.4.0)
+
+- **Real buildings**: Sheoganj and the Ashapurna surroundings now use real footprints from Overture Maps (Google Open Buildings + Microsoft ML Buildings + OSM): 8,393 footprints fetched for the whole world, 6,255 kept after dropping <12 m2 slivers and de-duplicating, 6,571 oriented rectangles (L/U-shaped outlines are split into up to 3 rectangles), **5,455 placed** in the game (the rest sat on mapped roads or overlapped another). Pipeline: `tools/buildings_to_world.py` (cached result `data/buildings/footprints.json`, raw download kept as `overture_raw.geojson`) -> `tools/gen_world.py`. Each building turns its front (windows, door, shop shutters) towards the nearest road; party walls (neighbour within 1 m) get blank sides; shop-shutter strips only on buildings within ~12 m of the Bamnera-Sheoganj road (76 of them: real coverage there is thin). Floors (1-4) are a deterministic guess from footprint area and road class, **not real heights** (the datasets have none here); colours, water tanks and stair rooms are generated.
+- **Ashapurna Township** keeps its hand-built layout (to scale from the footage); real footprints are used only outside its boundary wall.
+- **Renderer**: switched to Godot's **Mobile (Vulkan)** renderer. **Graphics** setting: Auto / Normal / High (Auto = High on Vulkan devices with >=6 cores, >=5 GB RAM and a non-weak GPU, else Normal). High = 4 shadow cascades out to ~285 m, 4096 atlas + high soft-shadow filter, 4x MSAA, stronger glow, aerial-perspective fog with sun scatter, sky reflections, longer view distance (820 m buildings), ~900 extra trees. Normal = the previous look (2 cascades, no MSAA, 2048 atlas). **Time of day** setting (Morning / Noon / Evening / Dusk): sun angle/colour, fog and ambient. Both apply to the next race.
+- Per-chunk static physics bodies (one box per building) so cars hit real buildings.
+- Dev: `LRW_QUALITY=high|normal` forces the tier; `tools/shoot.sh` uses `LRW_DRIVER_ARGS` (default Compatibility/GL; `--rendering-driver vulkan --rendering-method mobile` runs Mobile on the VM via lavapipe).
+
+**Verification**: VERIFIED on the VM: smoke test passes (all checks, incl. race finish, spawn on road, township, GP) under Compatibility; the Mobile renderer + High tier starts and renders (software Vulkan/lavapipe) and screenshots were inspected. UNVERIFIED: frame rate on a real phone (S24 Ultra target 60 fps High / 30+ Normal is a design target, not a measurement), the real-GPU look of Mobile, the Auto heuristic's choice on the actual phone, time-of-day on-device. If it stutters: Settings -> Graphics -> Normal.
 
 ## Phase 3a: Ashapurna Township + Ashapurna Grand Prix (v0.3.0)
 
@@ -35,13 +45,13 @@ A to-scale (metres) model of Ashapurna Township, Sheoganj, placed on the real Sh
 | Road centre-lines, classes, one-ways, junction topology | Road width per class (OSM has no widths here), markings, speed breakers |
 | Farmland / scrub / residential / water polygons, the river | Textures and colours of those areas |
 | Names/positions: Sheoganj, RSRTC Bus Station, 3 hospitals, Jaslok Clinic | Building models; hospital/clinic are 4/2-storey boxes with name labels |
-| 7 mapped building footprints | ~6,000 other buildings placed along roads with setbacks (OSM coverage of Sheoganj buildings is almost empty) |
+| ~5,450 real building footprints (Overture: Google Open Buildings CC BY 4.0, Microsoft ML ODbL, OSM) - position, outline, orientation | Building heights/floors (guessed from area), colours, windows/doors/shutters, water tanks, stair rooms |
 | — | Trees, poles, wires, street lights, the stunt park, stars, traffic |
-So: **the road layout is the real Sheoganj; the buildings along it are plausible, not the real ones.** Terrain is flat (no real hills/overpasses exist to model), so the "hill" is a built mound in the stunt park.
+So: **the road layout and the building footprints are the real Sheoganj; building heights, colours and details are guessed.** Terrain is flat (no real hills/overpasses exist to model), so the "hill" is a built mound in the stunt park.
 
-Rebuild the data: `python3 tools/fetch_osm.py && python3 tools/osm_to_world.py && python3 tools/make_routes.py && python3 tools/gen_world.py` (cached JSON is committed in `data/osm/`, so the game needs no network).
+Rebuild the data: `python3 tools/fetch_osm.py && python3 tools/osm_to_world.py && python3 tools/make_routes.py && python3 tools/buildings_to_world.py && python3 tools/gen_world.py` (re-download footprints with `overturemaps download --bbox=73.040,25.126,73.080,25.152 -f geojson --type=building -o data/buildings/overture_raw.geojson`) (cached JSON is committed in `data/osm/`, so the game needs no network).
 
-Map data © OpenStreetMap contributors, ODbL (https://www.openstreetmap.org/copyright). Also shown in-game under Settings.
+Map data © OpenStreetMap contributors, ODbL (https://www.openstreetmap.org/copyright). Building footprints: Overture Maps Foundation, incl. Google Open Buildings (CC BY 4.0), Microsoft Building Footprints (ODbL), OpenStreetMap contributors (ODbL). Also shown in-game under Settings.
 
 ## What was in Phase 1
 - Main menu: Play (Race / Free Roam), Car Selection (4 cars, 10 paints, stat bars, star unlocks), Settings, Quit
@@ -88,14 +98,14 @@ Verified on a Linux VM (software GL under xvfb) — see the bottom of this file 
 
 **NOT verified: any real Android device.** Unknown until someone runs it on a phone: frame rate on real hardware, touch layout and
 button size on real screens, tilt direction/sensitivity (accelerometer axis assumed), audio latency, thermal behaviour, the
-`gl_compatibility` look on Mali/Adreno GPUs. AI opponents were only observed under software rendering; handling feel by a human
+Mobile-renderer look on Adreno GPUs. AI opponents were only observed under software rendering; handling feel by a human
 driver (rather than scripted input) is untested.
 
 ## Known issues / limits
 - Results are shown the moment the player finishes; opponents still racing show "DNF".
-- Compatibility renderer: no SSAO/SSR/real reflections; "GTA-like" photorealism is not reachable on a phone with free assets. It is a stylised-realistic look.
-- Buildings are generic; ramps lift the car but the body cannot pitch (angular X/Z locked), so jumps are arcade-style.
-- On-device frame rate is **unmeasured** (~6,000 buildings are instanced per 220 m chunk, 28 traffic cars on Busy). If it is slow: Settings -> Traffic None, shadows off.
+- Mobile renderer: no SSAO/SSR/SDFGI (not available on Mobile); sky reflections only; "GTA-like" photorealism is not reachable on a phone with free assets. It is a stylised-realistic look.
+- Building heights are guessed; ramps lift the car but the body cannot pitch (angular X/Z locked), so jumps are arcade-style.
+- On-device frame rate is **unmeasured** (~5,500 buildings are instanced per 220 m chunk, 28 traffic cars on Busy). If it is slow: Settings -> Traffic None, shadows off.
 - Debug-signed APK.
 
 ## Roadmap

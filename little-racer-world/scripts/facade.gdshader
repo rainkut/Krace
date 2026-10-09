@@ -1,6 +1,6 @@
 shader_type spatial;
 // Procedural Indian-town building facade on a unit box. Per-instance data (INSTANCE_CUSTOM):
-// r = palette index/15, g = shop on front face, b = floors/15, a = random seed.
+// r = palette index/15, g = 1 shop on front face / 0.4 party-wall (blank sides), b = floors/15, a = random seed.
 varying vec3 lpos;
 varying vec3 lnrm;
 varying vec3 dims;
@@ -56,7 +56,8 @@ void fragment() {
 		if (h > floors * fl + 0.05) {
 			col = base * 0.78; // parapet
 		} else if (in_body) {
-			bool shop = front && row < 1.0 && cd.g > 0.5;
+			bool shop = front && row < 1.0 && cd.g > 0.9;
+			bool blank_side = cd.g > 0.2 && abs(lnrm.x) > 0.5;
 			if (shop) {
 				// roll-up shutter bays with a signboard strip
 				float bay = fract(u / 3.0 + 50.0);
@@ -67,6 +68,8 @@ void fragment() {
 					col = vec3(0.45, 0.50, 0.52) * (0.85 + 0.15 * sin(h * 38.0));
 					metal = 0.4; rough = 0.55;
 				}
+			} else if (blank_side) {
+				col = base * 0.95;
 			} else if (fx > 0.27 && fx < 0.73 && fy > 0.32 && fy < 0.82) {
 				float r = hash(vec2(colx, row) + seed * 91.0);
 				vec3 glass = vec3(0.16, 0.24, 0.30);

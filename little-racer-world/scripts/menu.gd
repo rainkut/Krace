@@ -324,7 +324,31 @@ func _page_settings() -> Control:
 		Settings.save_settings())
 	tr_row.add_child(tb)
 	v.add_child(tr_row)
-	var credit := UI.label("Sheoganj map data (c) OpenStreetMap contributors, ODbL. Textures/sky: ambientCG & Poly Haven (CC0). Car/props: Kenney (CC0).", 18, Color("9fb4c8"))
+	var gfx_row := HBoxContainer.new()
+	gfx_row.add_theme_constant_override("separation", 14)
+	gfx_row.add_child(UI.label("Graphics", 28))
+	var qb := OptionButton.new()
+	qb.add_item("Auto (%s)" % ("High" if Settings.auto_high() else "Normal"), 0)
+	qb.add_item("Normal", 1)
+	qb.add_item("High", 2)
+	qb.select(Settings.quality)
+	qb.custom_minimum_size = Vector2(230, 56)
+	qb.item_selected.connect(func(i):
+		Settings.quality = i
+		Settings.save_settings())
+	gfx_row.add_child(qb)
+	gfx_row.add_child(UI.label("Time", 28))
+	var tdb := OptionButton.new()
+	for i in 4:
+		tdb.add_item(Settings.TOD_NAMES[i], i)
+	tdb.select(Settings.time_of_day)
+	tdb.custom_minimum_size = Vector2(190, 56)
+	tdb.item_selected.connect(func(i):
+		Settings.time_of_day = i
+		Settings.save_settings())
+	gfx_row.add_child(tdb)
+	v.add_child(gfx_row)
+	var credit := UI.label("Map: (c) OpenStreetMap contributors (ODbL); buildings: Overture Maps Foundation - Google Open Buildings (CC BY 4.0), Microsoft Building Footprints (ODbL). Textures/sky: ambientCG & Poly Haven (CC0). Car/props: Kenney (CC0). Graphics changes apply next race.", 18, Color("9fb4c8"))
 	credit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	credit.custom_minimum_size = Vector2(900, 0)
 	v.add_child(credit)

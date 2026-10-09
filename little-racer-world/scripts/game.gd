@@ -709,6 +709,19 @@ func _circuit_player_finished() -> void:
 		hud.show_results(info)
 
 func _debug_camera() -> void:
+	var wc = Content.launch.get("wcam")
+	if wc is Dictionary and osm != null:
+		cam.set_physics_process(false)
+		cam.set_process(false)
+		var wp: Array = wc["pos"]
+		var wl: Array = wc["look"]
+		cam.fov = float(wc.get("fov", 70.0))
+		cam.global_position = Vector3(float(wp[0]), float(wp[1]), float(wp[2]))
+		var wup := Vector3.UP
+		if absf(float(wp[1]) - float(wl[1])) > 0.9 * Vector2(float(wp[0]) - float(wl[0]), float(wp[2]) - float(wl[2])).length():
+			wup = Vector3(0, 0, -1)
+		cam.look_at(Vector3(float(wl[0]), float(wl[1]), float(wl[2])), wup)
+		return
 	var c = Content.launch.get("cam")
 	if not (c is Dictionary) or osm == null or osm.township == null:
 		return

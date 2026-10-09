@@ -5,7 +5,7 @@ config_version=5
 config/name="Little Racer World"
 config/description="A family-friendly 3D open-world racing game for kids."
 run/main_scene="res://scenes/boot.tscn"
-config/features=PackedStringArray("4.7", "GL Compatibility")
+config/features=PackedStringArray("4.7", "Mobile")
 boot_splash/bg_color=Color(0.35, 0.65, 0.95, 1)
 config/icon="res://icon.svg"
 
@@ -80,8 +80,8 @@ common/physics_ticks_per_second=60
 3d/default_gravity=24.0
 
 [rendering]
-renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="gl_compatibility"
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="mobile"
 textures/vram_compression/import_etc2_astc=true
 anti_aliasing/quality/msaa_3d=0
 environment/defaults/default_clear_color=Color(0.55, 0.78, 0.95, 1)

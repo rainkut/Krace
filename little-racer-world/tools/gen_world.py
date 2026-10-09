@@ -187,30 +187,57 @@ for p in W["pois"]:
                 bld.append([round(px, 1), round(pz, 1), round(yaw, 3), w, dd, fl, 8 if p["k"] == "hospital" else 9, 0, 1, 2])
         landmarks.append({"n": p["n"], "k": p["k"], "x": round(px, 1), "z": round(pz, 1), "h": fl * 3.2 + 3.0})
 
-# 2) real footprints -> oriented boxes
-for b in W["buildings"]:
-    pts = b["p"][:-1] if b["p"][0] == b["p"][-1] else b["p"]
+# 2) real footprints (Overture Maps: Google Open Buildings + Microsoft ML + OSM), see buildings_to_world.py
+REAL = json.load(open("data/buildings/footprints.json"))["rects"]
+main_segs = []
+main_grid = {}
+for r in W["roads"]:
+    if r["c"] not in ("secondary", "tertiary"): continue
+    for a, b in zip(r["p"], r["p"][1:]):
+        i = len(main_segs); main_segs.append((a[0], a[1], b[0], b[1], r["w"] / 2))
+        for cx in range(int(math.floor(min(a[0], b[0]) / CELL)) - 1, int(math.floor(max(a[0], b[0]) / CELL)) + 2):
+            for cz in range(int(math.floor(min(a[1], b[1]) / CELL)) - 1, int(math.floor(max(a[1], b[1]) / CELL)) + 2):
+                main_grid.setdefault((cx, cz), []).append(i)
+def main_edge_dist(px, pz):
+    best = 99.0
+    for si in main_grid.get((int(math.floor(px / CELL)), int(math.floor(pz / CELL))), ()):
+        best = min(best, seg_dist(px, pz, main_segs[si]) - main_segs[si][4])
+    return best
+real_n = skipped = 0
+PAL_W = [14, 14, 12, 10, 8, 8, 10, 6, 0, 3, 3, 4, 3, 2, 3, 3]
+for cx, cz, ang, w, d, src, ar in REAL:
+    if edge_dist(cx, cz) < 0.3 or blocked_land(cx, cz): skipped += 1; continue
+    dist, tx, tz, fx, fz = nearest_road_dir(cx, cz)
     best = None
-    for deg in range(0, 90, 2):
-        a = math.radians(deg); c, s = math.cos(a), math.sin(a)
-        xs = [x * c + z * s for x, z in pts]; zs = [-x * s + z * c for x, z in pts]
-        area = (max(xs) - min(xs)) * (max(zs) - min(zs))
-        if best is None or area < best[0]: best = (area, a, min(xs), max(xs), min(zs), max(zs))
-    area, a, x0, x1, z0, z1 = best
-    c, s = math.cos(a), math.sin(a)
-    mx, mz = (x0 + x1) / 2, (z0 + z1) / 2
-    cx, cz = mx * c - mz * s, mx * s + mz * c
-    w, d = x1 - x0, z1 - z0
-    if w < 3 or d < 3: continue
-    yaw = -a
-    r = make_rect(cx, cz, yaw, w, d)
-    if rect_free(r):
-        add_rect(r)
-        try: fl = int(b["lv"])
-        except: fl = 2
-        bld.append([round(cx, 1), round(cz, 1), round(yaw, 3), round(w, 1), round(d, 1), max(1, min(5, fl)), 4, 0, 1, 1])
+    for k in range(4):
+        yaw = -ang + k * math.pi / 2
+        dot = math.sin(yaw) * fx + math.cos(yaw) * fz
+        if best is None or dot > best[0]: best = (dot, yaw, k)
+    _, yaw, k = best
+    ww, dd = (w, d) if k % 2 == 0 else (d, w)
+    r = make_rect(cx, cz, yaw, ww, dd)
+    if rect_on_road(r):
+        ww *= 0.85; dd *= 0.85
+        r = make_rect(cx, cz, yaw, ww, dd)
+        if rect_on_road(r, 0.0): skipped += 1; continue
+    if not rect_free(r): skipped += 1; continue
+    add_rect(r)
+    me = main_edge_dist(cx, cz)
+    onmain = me < 18
+    if ar < 40: fl = random.choices([1, 2], [75, 25])[0]
+    elif ar < 110: fl = random.choices([1, 2, 3], [30, 52, 18])[0]
+    else: fl = random.choices([2, 3, 4], [45, 40, 15])[0]
+    if onmain and fl < 2 and random.random() < 0.5: fl += 1
+    col = random.choices(range(16), PAL_W)[0]
+    ux, uz = r[2], r[3]
+    party = any(point_in_rect(cx + sg * ux * (ww / 2 + 1.0), cz + sg * uz * (ww / 2 + 1.0), x, 0.0) for sg in (1, -1) for x in [rects[kk] for kk in rgrid.get((int(math.floor((cx + sg * ux * (ww / 2 + 1.0)) / RC)), int(math.floor((cz + sg * uz * (ww / 2 + 1.0)) / RC))), ())])
+    shop = 1 if (onmain and me < 12 and ar >= 20 and random.random() < 0.85) else (0.4 if party else 0)
+    bld.append([round(cx, 1), round(cz, 1), round(yaw, 3), round(ww, 1), round(dd, 1), min(fl, 4), col, shop,
+                1 if random.random() < 0.5 else 0, 1])
+    real_n += 1
+print("real footprints", real_n, "skipped", skipped)
 
-# 3) generated roadside buildings
+# ---------------- helpers for trees/poles ----------------
 def polyline_pts(p, step):
     out = []
     cum = 0.0
@@ -227,43 +254,7 @@ def at(spans, s):
     c0, L, a, tx, tz = spans[-1]
     return a[0] + tx * L, a[1] + tz * L, tx, tz
 
-W_CHOICES = [6, 6, 9, 9, 9, 12]
-tries = placed = 0
-order = sorted(roads, key=lambda r: {"secondary": 0, "tertiary": 1, "unclassified": 2}.get(r["c"], 3))
-for r in order:
-    spans, total = polyline_pts(r["p"], 1)
-    if total < 12: continue
-    hw = r["w"] / 2
-    main = r["c"] in ("secondary", "tertiary")
-    for side in (1, -1):
-        s = 2.0
-        while s < total - 4:
-            w = random.choice(W_CHOICES) if not main else random.choice([6, 9, 9, 12])
-            d = random.uniform(8.0, 12.0)
-            x, z, tx, tz = at(spans, min(total, s + w / 2))
-            nx, nz = -tz * side, tx * side
-            setback = 2.2 + (random.random() * 1.2 if not main else random.random() * 0.4)
-            cx, cz = x + nx * (hw + setback + d / 2), z + nz * (hw + setback + d / 2)
-            rr = min(math.hypot(cx, cz), 520 + math.hypot(cx - PIN[0], cz - PIN[1]) * 0.7)
-            keep = 1.0 if rr < 520 else max(0.12, 1.0 - (rr - 520) / 560)
-            tries += 1
-            if out_of_bounds(cx, cz) or random.random() > keep or in_open_land(cx, cz):
-                s += 4.0; continue
-            yaw = math.atan2(-nx, -nz)
-            rect = make_rect(cx, cz, yaw, w, d)
-            if rect_on_road(rect) or not rect_free(rect):
-                s += 3.0; continue
-            add_rect(rect)
-            if main:
-                fl = random.choices([1, 2, 3, 4], [5, 35, 40, 20])[0]
-            else:
-                fl = random.choices([1, 2, 3], [30, 48, 22])[0]
-            col = random.choices(range(8), [14, 14, 12, 10, 8, 8, 10, 6])[0]
-            shop = 1 if (main and random.random() < 0.8) or (r["c"] == "unclassified" and random.random() < 0.15) else 0
-            bld.append([round(cx, 1), round(cz, 1), round(yaw, 3), w, round(d, 1), fl, col, shop, 1 if random.random() < 0.45 else 0, 0])
-            placed += 1
-            s += w
-print("buildings", len(bld), "from", tries, "tries")
+print("buildings", len(bld))
 
 # ---------------- trees ----------------
 trees = []   # [x, z, scale, kind, collide]
@@ -295,6 +286,12 @@ for f in W["areas"]:
             if in_poly(px, pz, f["p"]) and tree_ok(px, pz) and (math.hypot(px, pz) < 1000 or math.hypot(px - PIN[0], pz - PIN[1]) < 700):
                 trees.append([round(px, 1), round(pz, 1), round(random.uniform(2.2, 3.4), 2), random.randrange(8), 0]); n -= 1
 trees = trees[:2600]
+for t in list(trees):   # High-quality-only extras: a second row of trees/bushes behind the roadside ones
+    for _ in range(2):
+        a = random.uniform(0, math.tau); r = random.uniform(4.5, 10.0)
+        px, pz = t[0] + math.cos(a) * r, t[1] + math.sin(a) * r
+        if tree_ok(px, pz) and not near_rect(px, pz, 2.5):
+            trees.append([round(px, 1), round(pz, 1), round(random.uniform(1.8, 3.2), 2), random.randrange(8), 0, 1]); break
 print("trees", len(trees))
 
 # ---------------- poles, wires, lights ----------------

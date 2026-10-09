@@ -515,14 +515,14 @@ func _world_buildings() -> void:
 	var tank_xf: Array = []
 	var stair_xf: Array = []
 	var space := get_world_3d().space
-	var body := PhysicsServer3D.body_create()
-	PhysicsServer3D.body_set_mode(body, PhysicsServer3D.BODY_MODE_STATIC)
-	PhysicsServer3D.body_set_space(body, space)
-	PhysicsServer3D.body_set_collision_layer(body, 1)
-	PhysicsServer3D.body_set_collision_mask(body, 0)
-	_bodies.append(body)
 	for k in chunks:
 		var arr: Array = chunks[k]
+		var body := PhysicsServer3D.body_create()
+		PhysicsServer3D.body_set_mode(body, PhysicsServer3D.BODY_MODE_STATIC)
+		PhysicsServer3D.body_set_space(body, space)
+		PhysicsServer3D.body_set_collision_layer(body, 1)
+		PhysicsServer3D.body_set_collision_mask(body, 0)
+		_bodies.append(body)
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.use_custom_data = true
@@ -546,12 +546,12 @@ func _world_buildings() -> void:
 			if int(b[8]) == 1 and int(b[9]) != 2:
 				var t := Transform3D(Basis(Vector3.UP, yaw), pos + Basis(Vector3.UP, yaw) * Vector3(w * 0.25, h * 0.5 + 0.7, -d * 0.2))
 				tank_xf.append(t)
-			if int(b[9]) == 0 and sd > 0.55:
+			if int(b[9]) != 2 and sd > 0.55:
 				stair_xf.append(Transform3D(Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(2.6, 2.4, 3.0)), pos + Basis(Vector3.UP, yaw) * Vector3(-w * 0.28, h * 0.5 + 1.2, d * 0.22)))
 		var mmi := MultiMeshInstance3D.new()
 		mmi.multimesh = mm
 		mmi.material_override = mat
-		mmi.visibility_range_end = 560.0
+		mmi.visibility_range_end = 820.0 if Settings.quality_level() == 2 else 560.0
 		mmi.visibility_range_end_margin = 40.0
 		mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 		mmi.custom_aabb = AABB(Vector3(k.x * 220.0 - 40.0, -2.0, k.y * 220.0 - 40.0), Vector3(300.0, 30.0, 300.0))
@@ -573,7 +573,7 @@ func _instances(mesh: Mesh, xforms: Array, mat: Material, setup: Callable) -> vo
 	var mmi := MultiMeshInstance3D.new()
 	mmi.multimesh = mm
 	mmi.material_override = mat
-	mmi.visibility_range_end = 380.0
+	mmi.visibility_range_end = 560.0 if Settings.quality_level() == 2 else 380.0
 	add_child(mmi)
 
 func _world_trees() -> void:
@@ -583,7 +583,10 @@ func _world_trees() -> void:
 	var shape := CylinderShape3D.new()
 	shape.radius = 0.7
 	shape.height = 6.0
+	var high := Settings.quality_level() == 2
 	for t in gen.get("trees", []):
+		if t.size() > 5 and not high:
+			continue
 		var kind: String = TREE_MODELS[int(t[3]) % TREE_MODELS.size()]
 		var p := Vector3(float(t[0]), 0.0, float(t[1]))
 		var sc := float(t[2])
