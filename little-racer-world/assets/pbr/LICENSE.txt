@@ -1,0 +1,2 @@
+Textures: ambientCG.com (CC0 1.0): Asphalt031, Grass004, Ground037, Concrete034, PavingStones070, PaintedPlaster017 (resized to 512px).
+Sky: Poly Haven "Kloofendal 48d Partly Cloudy (Pure Sky)" HDRI, CC0 (polyhaven.com), 1k.

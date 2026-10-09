@@ -13,7 +13,9 @@ var shadows := true
 var use_mph := false
 var difficulty := 1  # 0 easy, 1 normal, 2 hard
 var force_touch := false
+var traffic := 2  # 0 off, 1 light, 2 normal, 3 busy
 
+const TRAFFIC_COUNT := [0, 8, 16, 28]
 const DIFFICULTY_SCALE := [0.80, 0.90, 1.0]
 
 func _ready() -> void:
@@ -39,6 +41,7 @@ func load_settings() -> void:
 	shadows = cf.get_value("video", "shadows", shadows)
 	use_mph = cf.get_value("game", "use_mph", use_mph)
 	difficulty = clampi(int(cf.get_value("game", "difficulty", difficulty)), 0, 2)
+	traffic = clampi(int(cf.get_value("game", "traffic", traffic)), 0, 3)
 
 func save_settings() -> void:
 	var cf := ConfigFile.new()
@@ -51,6 +54,7 @@ func save_settings() -> void:
 	cf.set_value("video", "shadows", shadows)
 	cf.set_value("game", "use_mph", use_mph)
 	cf.set_value("game", "difficulty", difficulty)
+	cf.set_value("game", "traffic", traffic)
 	cf.save(PATH)
 
 func apply() -> void:

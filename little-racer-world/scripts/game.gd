@@ -36,6 +36,11 @@ var _tilt_neutral := 0.0
 var _player_racer: Dictionary
 var _paused := false
 var _last_gate_idx := -1
+var osm: OsmWorld
+var traffic: TrafficManager
+var minimap: MapView
+var _off_t := 0.0
+var _recover_cd := 0.0
 
 func _ready() -> void:
 	var launch := Content.launch
@@ -49,17 +54,25 @@ func _ready() -> void:
 		push_error("Town '%s' not found" % town_id)
 		get_tree().change_scene_to_file("res://scenes/menu.tscn")
 		return
-	_build_environment()
 	var town_data: Dictionary = Content.towns[town_id]
+	var is_osm := str(town_data.get("kind", "grid")) == "osm"
+	if is_osm:
+		Look.add_to(self, Settings.shadows, 150.0)
+	else:
+		_build_environment()
 	_prepare_route(town_data)
-	town = Town.new()
+	if is_osm:
+		osm = OsmWorld.new()
+		town = osm
+	else:
+		town = Town.new()
 	add_child(town)
 	town.build(town_data, route_cells)
 	_spawn_vehicles(town_data)
 	_build_markers()
 	_build_stars()
 	cam = ChaseCamera.new()
-	cam.far = 500.0
+	cam.far = 900.0 if is_osm else 500.0
 	cam.target = player
 	add_child(cam)
 	cam.current = true
@@ -79,6 +92,8 @@ func _ready() -> void:
 		touch = TouchControls.new()
 		layer.add_child(touch)
 		add_child(layer)
+	if is_osm:
+		_setup_osm_extras()
 	Sfx.start_engine()
 	player.bumped.connect(func(s): Sfx.play("bump", 0.4 + s))
 	var a := Input.get_accelerometer()
@@ -141,6 +156,15 @@ func _prepare_route(town_data: Dictionary) -> void:
 		return
 	laps = int(race.get("laps", 2))
 	gate_every = int(race.get("gate_every", 8))
+	if race.has("route_xz"):
+		var pts: Array = race["route_xz"]
+		for i in pts.size():
+			var a := Vector3(float(pts[i][0]), 0.0, float(pts[i][1]))
+			var b := Vector3(float(pts[(i + 1) % pts.size()][0]), 0.0, float(pts[(i + 1) % pts.size()][1]))
+			var k := maxi(1, int(round(a.distance_to(b) / 11.0)))
+			for j in k:
+				route.append(a.lerp(b, float(j) / k))
+		return
 	var corners: Array = race["route"]
 	var cells: Array[Vector2i] = [Vector2i(int(corners[0][0]), int(corners[0][1]))]
 	for i in range(1, corners.size()):
@@ -176,7 +200,13 @@ func _spawn_vehicles(town_data: Dictionary) -> void:
 		def = Content.get_vehicle(car_id)
 	player = _make_vehicle(car_id, Save.paint_for(car_id, int(def.get("default_paint", 0))))
 	var spawn_dir := Vector3(1, 0, 0)
-	var spawn_pos := town.cell_center(int(town_data["spawn"]["cell"][0]), int(town_data["spawn"]["cell"][1]))
+	var spawn_pos := Vector3.ZERO
+	if osm != null:
+		var sp := osm.spawn_pose()
+		spawn_pos = sp.origin
+		spawn_dir = -sp.basis.z
+	else:
+		spawn_pos = town.cell_center(int(town_data["spawn"]["cell"][0]), int(town_data["spawn"]["cell"][1]))
 	if mode == "race":
 		spawn_pos = route[0]
 		spawn_dir = (route[1] - route[0]).normalized()
@@ -353,6 +383,8 @@ func _physics_process(dt: float) -> void:
 	if Input.is_action_just_pressed("pause_game"):
 		_set_paused(not _paused)
 	_collect_stars()
+	if osm != null:
+		_check_recovery(dt)
 	if mode == "race" and state != "countdown":
 		for r in racers:
 			_update_racer(r)
@@ -519,7 +551,7 @@ func _player_finished() -> void:
 	var rows: Array = []
 	for i in order.size():
 		var r: Dictionary = order[i]
-		var t_text := UI.format_time(r["finish_time"]) if r["finished"] else "racing..."
+		var t_text := UI.format_time(r["finish_time"]) if r["finished"] else "DNF"
 		rows.append("%d.  %s%s   %s" % [i + 1, r["name"], "  (you)" if r["is_player"] else "", t_text])
 	var info := {
 		"place": place, "place_text": _ordinal(place), "time": race_time, "new_best": new_best,
@@ -557,6 +589,44 @@ func _reset_player() -> void:
 	player.teleport_to(xf)
 	player.steer = 0.0
 	cam.snap_to_target()
+
+# ---------------------------------------------------------------- Sheoganj extras
+func _setup_osm_extras() -> void:
+	if Settings.traffic > 0:
+		traffic = TrafficManager.new()
+		add_child(traffic)
+		traffic.setup(osm, player, int(Settings.TRAFFIC_COUNT[Settings.traffic]))
+	var layer := CanvasLayer.new()
+	layer.layer = 8
+	minimap = MapView.new()
+	minimap.world = osm
+	minimap.player = player
+	minimap.route = route
+	if mode == "race":
+		minimap.targets_fn = func(): return route[int(_player_racer["count"]) % route.size()]
+	layer.add_child(minimap)
+	add_child(layer)
+
+func _unhandled_input(e: InputEvent) -> void:
+	if minimap != null and e is InputEventKey and e.pressed and not e.echo and e.keycode == KEY_M:
+		minimap.toggle()
+
+func _check_recovery(dt: float) -> void:
+	_recover_cd = maxf(0.0, _recover_cd - dt)
+	if state == "finished" or state == "countdown":
+		return
+	var p := player.global_position
+	var in_park := osm.has_park and Vector2(p.x - osm.park_center.x, p.z - osm.park_center.z).length() < 62.0
+	var off := (not in_park) and osm.road_distance(p) > 7.0
+	if p.y < -3.0 or p.y > 40.0:
+		off = true
+		_off_t = 99.0
+	_off_t = _off_t + dt if off else maxf(0.0, _off_t - dt * 2.0)
+	if _off_t > 4.0 and _recover_cd <= 0.0:
+		_off_t = 0.0
+		_recover_cd = 3.0
+		_reset_player()
+		hud.show_message("Back on the road!", 1.4, Color("8fe3ff"))
 
 # ---------------------------------------------------------------- flow
 func _set_paused(on: bool) -> void:

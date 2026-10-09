@@ -1,0 +1,14 @@
+{
+ "id": "sheoganj",
+ "name": "Sheoganj",
+ "kind": "osm",
+ "world": "res://data/osm/sheoganj_world.json",
+ "spawn_xz": [
+  245,
+  -133
+ ],
+ "spawn_dir": [
+  0.8,
+  0.6
+ ]
+}

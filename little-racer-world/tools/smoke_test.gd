@@ -8,6 +8,8 @@ var frames := 0
 var info := {}
 var game: Node
 var t0 := 0.0
+var recovery_tested := false
+var recovery_checked := false
 
 func check(ok: bool, msg: String) -> void:
 	print(("PASS  " if ok else "FAIL  ") + msg)
@@ -43,8 +45,8 @@ func _initialize() -> void:
 func _process(_dt: float) -> bool:
 	frames += 1
 	var elapsed := Time.get_ticks_msec() / 1000.0 - t0
-	if elapsed > 240.0:
-		check(false, "race finished within 240 s wall-clock")
+	if elapsed > 600.0:
+		check(false, "races finished within 600 s wall-clock")
 		return _finish()
 	if phase == 0 and frames > 20 and current_scene != null:
 		game = current_scene
@@ -55,6 +57,25 @@ func _process(_dt: float) -> bool:
 		phase = 2
 	elif phase == 2 and not info.is_empty():
 		_check_results()
+		var Content = root.get_node("Content")
+		Content.launch = {"mode": "race", "race_id": "sheoganj_lanes", "autodrive": true}
+		info = {}
+		phase = 3
+		frames = 0
+		change_scene_to_file("res://scenes/game.tscn")
+	elif phase == 3 and frames > 40 and current_scene != null and current_scene.get("osm") != null:
+		game = current_scene
+		game.race_finished.connect(func(i): info = i)
+		_osm_checks()
+		phase = 4
+	elif phase == 4 and frames > 400 and not recovery_tested:
+		recovery_tested = true
+		game.player.teleport_to(Transform3D(Basis.IDENTITY, Vector3(game.player.global_position.x, -12.0, game.player.global_position.z)))
+	elif phase == 4 and frames > 440 and recovery_tested and not recovery_checked:
+		recovery_checked = true
+		check(game.player.global_position.y > -2.0, "fell off world -> auto-recovered (y=%.1f)" % game.player.global_position.y)
+	elif phase == 4 and not info.is_empty():
+		check(info["place"] >= 1 and info["place"] <= 4, "Sheoganj race finished (place %s, %.0f s)" % [info["place"], info["time"]])
 		return _finish()
 	return false
 
@@ -91,6 +112,22 @@ func _check_results() -> void:
 	check(d is Dictionary and int(d.get("races_finished", 0)) >= 1, "save records the finished race")
 	check(d is Dictionary and d.get("best_times", {}).has("sunny_circuit"), "best time saved")
 	check(Save.stars > 0, "stars rewarded (%d)" % Save.stars)
+
+func _osm_checks() -> void:
+	var Settings = root.get_node("Settings")
+	var w = game.osm
+	check(w != null and w.extent > 500.0, "Sheoganj OSM world loaded")
+	var sp: Transform3D = w.spawn_pose()
+	check(w.is_road_at(sp.origin), "spawn is on a real road")
+	check(not w.is_road_at(Vector3(5000, 0, 5000)), "far field is not road")
+	check(w.star_positions.size() >= 60, "stars placed (%d)" % w.star_positions.size())
+	check(w.has_park, "stunt park exists")
+	check(game.route.size() > 100, "route densified (%d pts)" % game.route.size())
+	var want: int = Settings.TRAFFIC_COUNT[Settings.traffic]
+	check(game.traffic != null and game.traffic.cars.size() == want, "traffic count matches setting (%d)" % want)
+	check(game.minimap != null, "minimap created")
+	var rr: PackedVector3Array = w.random_route(w.nearest_node(Vector2(0, 0)), 400.0)
+	check(rr.size() > 10, "traffic random route on real roads (%d pts)" % rr.size())
 
 func _finish() -> bool:
 	Engine.time_scale = 1.0

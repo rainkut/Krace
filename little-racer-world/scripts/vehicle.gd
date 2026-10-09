@@ -11,6 +11,7 @@ var throttle := 0.0      # 0..1
 var brake := 0.0         # 0..1 (reverses when stopped)
 var steer := 0.0         # -1 left .. +1 right
 var handbrake := false
+var reverse_now := false   # AI/explicit reverse; players get it after holding brake while stopped
 var frozen_control := false
 var max_speed := 30.0
 var accel := 14.0
@@ -24,6 +25,7 @@ var road_query := Callable()
 var visual: Node3D
 var half_height := 0.6
 
+var _stopped_brake_t := 0.0
 var _teleport_pending := false
 var _teleport_xf := Transform3D.IDENTITY
 var _last_set_speed := 0.0
@@ -61,6 +63,9 @@ static func create(vehicle_def: Dictionary, paint_index: int) -> Vehicle:
 	v.visual = CarVisual.build(vehicle_def, paint_index, v.half_height)
 	v.add_child(v.visual)
 	return v
+
+func _ready() -> void:
+	add_to_group("vehicle")
 
 func teleport_to(xf: Transform3D) -> void:
 	_teleport_xf = xf
@@ -101,8 +106,15 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if br > 0.0:
 		if vf > 0.5:
 			vf = maxf(0.0, vf - 34.0 * br * dt)
+			_stopped_brake_t = 0.0
 		else:
-			vf = maxf(-max_speed * 0.3, vf - accel * 0.55 * br * dt)
+			_stopped_brake_t += dt
+			if not frozen_control and (reverse_now or _stopped_brake_t > 0.7):
+				vf = maxf(-max_speed * 0.3, vf - accel * 0.55 * br * dt)
+			else:
+				vf = move_toward(vf, 0.0, 20.0 * dt)
+	else:
+		_stopped_brake_t = 0.0
 	if th == 0.0 and br == 0.0:
 		vf = move_toward(vf, 0.0, 5.0 * dt)
 	vf -= vf * (0.03 if on_road else 0.28) * dt

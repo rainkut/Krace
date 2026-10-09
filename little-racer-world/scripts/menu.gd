@@ -173,22 +173,27 @@ func _page_main() -> Control:
 
 func _page_play() -> Control:
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 14)
+	v.add_theme_constant_override("separation", 12)
 	v.add_child(UI.label("Choose a game", 38, Color("ffe14a")))
 	for r in Content.races:
 		var best: float = Save.best_times.get(r["id"], 0.0)
-		var cap: String = str(r["name"])
-		var b := UI.button("Race: " + cap, func():
+		var town_name := str(Content.towns.get(r["town"], {}).get("name", ""))
+		var txt := "%s\n%s  -  %d lap%s%s" % [r["name"], town_name, int(r.get("laps", 1)), "" if int(r.get("laps", 1)) == 1 else "s", ("  -  best " + UI.format_time(best)) if best > 0.0 else ""]
+		v.add_child(UI.button(txt, func():
 			Content.launch = {"mode": "race", "race_id": r["id"]}
-			get_tree().change_scene_to_file("res://scenes/game.tscn"))
-		v.add_child(b)
-		var info := UI.label("%d laps%s" % [int(r.get("laps", 1)), ("   best " + UI.format_time(best)) if best > 0.0 else ""], 26, Color("cfe6ff"))
-		v.add_child(info)
-	v.add_child(UI.button("Free Roam", func():
-		Content.launch = {"mode": "roam"}
-		get_tree().change_scene_to_file("res://scenes/game.tscn")))
+			get_tree().change_scene_to_file("res://scenes/game.tscn"), Vector2(420, 96)))
+	for t in Content.towns.values():
+		var tid: String = t["id"]
+		v.add_child(UI.button("Free Roam: " + str(t.get("name", tid)), func():
+			Content.launch = {"mode": "roam", "town": tid}
+			get_tree().change_scene_to_file("res://scenes/game.tscn"), Vector2(420, 76)))
 	v.add_child(UI.button("Back", func(): show_page("main"), Vector2(360, 64)))
-	return _left_column(v)
+	var sc := ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(470, 520)
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.custom_minimum_size = Vector2(440, 0)
+	sc.add_child(v)
+	return _left_column(sc, 500.0)
 
 func _page_cars() -> Control:
 	var v := VBoxContainer.new()
@@ -288,6 +293,22 @@ func _page_settings() -> Control:
 		Settings.save_settings())
 	diff_row.add_child(ob)
 	v.add_child(diff_row)
+	var tr_row := HBoxContainer.new()
+	tr_row.add_child(UI.label("Traffic", 28))
+	var tb := OptionButton.new()
+	for i in 4:
+		tb.add_item(["None", "Light", "Normal", "Busy"][i], i)
+	tb.select(Settings.traffic)
+	tb.custom_minimum_size = Vector2(200, 56)
+	tb.item_selected.connect(func(i):
+		Settings.traffic = i
+		Settings.save_settings())
+	tr_row.add_child(tb)
+	v.add_child(tr_row)
+	var credit := UI.label("Sheoganj map data (c) OpenStreetMap contributors, ODbL. Textures/sky: ambientCG & Poly Haven (CC0). Car/props: Kenney (CC0).", 18, Color("9fb4c8"))
+	credit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	credit.custom_minimum_size = Vector2(900, 0)
+	v.add_child(credit)
 	v.add_child(UI.button("Back", func(): show_page("main"), Vector2(360, 64)))
 	var panel := _left_column(v, 1000.0)
 	panel.position = Vector2(40, 120)

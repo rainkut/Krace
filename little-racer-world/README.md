@@ -1,9 +1,35 @@
-# Little Racer World — Phase 1
+# Little Racer World — Phase 2
 
 Family-friendly 3D arcade racing in Godot 4.7 (GDScript, `gl_compatibility` renderer, mobile-first).
 Phase 1 = one complete, playable loop. No violence, no gambling, no ads, no network, no permissions.
 
-## What is in Phase 1
+## What is new in Phase 2
+- **Real Sheoganj** (Rajasthan, 25.139 N 73.066 E): roads, junctions, roundabout, rivers, water, farmland and landmarks come from OpenStreetMap, meshed at runtime (`scripts/osm_world.gd`). ~220 road segments inside a 2.2 km square, drive on the left.
+- Three Sheoganj races on real roads (Main Road, Old Town Lanes, Bus Station Run) next to the original Sunny Circuit; Free Roam works in both towns.
+- Procedural Indian-town buildings (flat roofs, water tanks, rooftop stair rooms, shop shutters, pastel plaster), trees, electricity poles and sagging wires, street lights, hospital/clinic/bus-station landmarks with name labels.
+- A **stunt park** (ramps, mound hill, cones, stars up on the ramps) with collectible stars; 80+ stars across town.
+- Adjustable **traffic** (None / Light / Normal / Busy in Settings) that wanders real roads on the left and keeps its distance.
+- **Auto-recovery**: leave the road for ~4 s (or fall off the world) and the car is put back on it with "Back on the road!"; invisible walls at the map edge.
+- **Minimap** (top-left, heading-up) — tap it or press M for the full map with race route, next checkpoint and landmarks.
+- 9 more vehicles (police, sedan, van, delivery, ambulance, fire truck, garbage truck, truck, sports sedan), all data-driven and star-unlocked.
+- Realism pass: CC0 PBR textures (asphalt, ground, grass, concrete), HDRI sky, filmic tonemapping, warm sun with shadows, fog, bloom/colour grading, lane markings, speed breakers, facade shader for windows.
+- Phase 1 fixes: brake no longer insta-reverses when stopped (needs ~0.7 s of held brake), AI reverse still works, unfinished racers are shown as DNF.
+
+## Real data vs generated (Sheoganj)
+| Real (OpenStreetMap, ODbL) | Generated (invented, deterministic seed) |
+|---|---|
+| Road centre-lines, classes, one-ways, junction topology | Road width per class (OSM has no widths here), markings, speed breakers |
+| Farmland / scrub / residential / water polygons, the river | Textures and colours of those areas |
+| Names/positions: Sheoganj, RSRTC Bus Station, 3 hospitals, Jaslok Clinic | Building models; hospital/clinic are 4/2-storey boxes with name labels |
+| 7 mapped building footprints | ~6,000 other buildings placed along roads with setbacks (OSM coverage of Sheoganj buildings is almost empty) |
+| — | Trees, poles, wires, street lights, the stunt park, stars, traffic |
+So: **the road layout is the real Sheoganj; the buildings along it are plausible, not the real ones.** Terrain is flat (no real hills/overpasses exist to model), so the "hill" is a built mound in the stunt park.
+
+Rebuild the data: `python3 tools/fetch_osm.py && python3 tools/osm_to_world.py && python3 tools/make_routes.py && python3 tools/gen_world.py` (cached JSON is committed in `data/osm/`, so the game needs no network).
+
+Map data © OpenStreetMap contributors, ODbL (https://www.openstreetmap.org/copyright). Also shown in-game under Settings.
+
+## What was in Phase 1
 - Main menu: Play (Race / Free Roam), Car Selection (4 cars, 10 paints, stat bars, star unlocks), Settings, Quit
 - Compact connected 3D town ("Sunnyvale", 23x23 cells of 12 m): roads, junctions, crossings, kerbs, houses, trees, street lights, parked cars
 - Arcade car physics (RigidBody3D with a shaped planar velocity model), follow camera with wall avoidance and speed FOV
@@ -15,6 +41,7 @@ Phase 1 = one complete, playable loop. No violence, no gambling, no ads, no netw
 - Data-driven: cars, paints, races and towns are JSON; mods load from `user://mods/<name>/data/` (see MODDING.md)
 
 ## Assets and licences
+Textures: ambientCG (CC0). Sky HDRI: Poly Haven "Kloofendal 48d" (CC0). See `assets/pbr/LICENSE.txt`.
 3D models: Kenney (kenney.nl) Car Kit, City Kit (Roads), City Kit (Suburban), Nature Kit — **CC0**. Licence files are
 next to the models in `assets/kenney/*/License.txt`. Everything else (code, icon, sounds, town layout) is original.
 
@@ -23,7 +50,7 @@ next to the models in `assets/kenney/*/License.txt`. Everything else (code, icon
 data/            vehicles.json, races.json, towns/*.json   (all game content)
 scripts/         game code (autoloads: settings, save_game, sfx, content)
 scenes/          boot / menu / game (each one root node + script; the world is built in code)
-tools/           gen_town.py (town generator), shot.gd + shoot.sh (screenshots), smoke_test.gd, drive_test.gd, sync_vm.sh
+tools/           fetch_osm.py / osm_to_world.py / make_routes.py / gen_world.py (Sheoganj data pipeline), gen_town.py (grid town generator), shot.gd + shoot.sh (screenshots), smoke_test.gd, drive_test.gd, sync_vm.sh
 export_presets.cfg   Android (arm64, debug keystore, landscape, no permissions, no gradle)
 ```
 
@@ -51,9 +78,11 @@ button size on real screens, tilt direction/sensitivity (accelerometer axis assu
 driver (rather than scripted input) is untested.
 
 ## Known issues / limits
-- Results are shown the moment the player finishes; opponents still racing show "racing..." (their final times are not waited for).
-- Only one town and one race. Brake is strong (arcade) and will reverse if held when stopped.
-- Debug-signed APK, version 0.1.0.
+- Results are shown the moment the player finishes; opponents still racing show "DNF".
+- Compatibility renderer: no SSAO/SSR/real reflections; "GTA-like" photorealism is not reachable on a phone with free assets. It is a stylised-realistic look.
+- Buildings are generic; ramps lift the car but the body cannot pitch (angular X/Z locked), so jumps are arcade-style.
+- On-device frame rate is **unmeasured** (~6,000 buildings are instanced per 220 m chunk, 28 traffic cars on Busy). If it is slow: Settings -> Traffic None, shadows off.
+- Debug-signed APK.
 
-## Phase 2+ (not started)
-Larger open world, more races, more cars/upgrades, mod workshop tooling. Deliberately not started.
+## Roadmap
+See ROADMAP.md. Phase 3+ is deliberately not started.

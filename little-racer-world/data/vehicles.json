@@ -1,28 +1,228 @@
 {
  "paints": [
-  {"name": "Cherry", "color": "#e8232a"},
-  {"name": "Orange", "color": "#ff8a1f"},
-  {"name": "Sunshine", "color": "#ffd21f"},
-  {"name": "Lime", "color": "#6fcf2f"},
-  {"name": "Forest", "color": "#1f9a52"},
-  {"name": "Sky", "color": "#2f9bff"},
-  {"name": "Royal", "color": "#3b4de0"},
-  {"name": "Grape", "color": "#8e3ad6"},
-  {"name": "Bubblegum", "color": "#ff6fb5"},
-  {"name": "Snow", "color": "#f2f4f7"}
+  {
+   "name": "Cherry",
+   "color": "#e8232a"
+  },
+  {
+   "name": "Orange",
+   "color": "#ff8a1f"
+  },
+  {
+   "name": "Sunshine",
+   "color": "#ffd21f"
+  },
+  {
+   "name": "Lime",
+   "color": "#6fcf2f"
+  },
+  {
+   "name": "Forest",
+   "color": "#1f9a52"
+  },
+  {
+   "name": "Sky",
+   "color": "#2f9bff"
+  },
+  {
+   "name": "Royal",
+   "color": "#3b4de0"
+  },
+  {
+   "name": "Grape",
+   "color": "#8e3ad6"
+  },
+  {
+   "name": "Bubblegum",
+   "color": "#ff6fb5"
+  },
+  {
+   "name": "Snow",
+   "color": "#f2f4f7"
+  }
  ],
  "vehicles": [
-  {"id": "sunny_hatch", "name": "Sunny Hatch", "model": "res://assets/kenney/cars/hatchback-sports.glb", "model_scale": 1.75,
-   "model_yaw": 180, "max_speed": 32, "accel": 15, "handling": 1.0, "grip": 9, "unlock_stars": 0, "default_paint": 0,
-   "blurb": "Zippy little all-rounder. Great for beginners!"},
-  {"id": "zippy_taxi", "name": "Zippy Taxi", "model": "res://assets/kenney/cars/taxi.glb", "model_scale": 1.75,
-   "model_yaw": 180, "max_speed": 30, "accel": 14, "handling": 1.05, "grip": 10, "unlock_stars": 0, "default_paint": 2,
-   "blurb": "Nippy and easy to steer around corners."},
-  {"id": "rocket_racer", "name": "Rocket Racer", "model": "res://assets/kenney/cars/race.glb", "model_scale": 1.9,
-   "model_yaw": 180, "max_speed": 38, "accel": 18, "handling": 0.9, "grip": 8, "unlock_stars": 12, "default_paint": 5,
-   "blurb": "Super fast! Takes a steady hand."},
-  {"id": "bruno_suv", "name": "Bruno SUV", "model": "res://assets/kenney/cars/suv.glb", "model_scale": 1.75,
-   "model_yaw": 180, "max_speed": 29, "accel": 13, "handling": 1.1, "grip": 11, "unlock_stars": 25, "default_paint": 4,
-   "blurb": "Big and sturdy. Sticks to the road like glue."}
+  {
+   "id": "sunny_hatch",
+   "name": "Sunny Hatch",
+   "model": "res://assets/kenney/cars/hatchback-sports.glb",
+   "model_scale": 1.75,
+   "model_yaw": 180,
+   "max_speed": 32,
+   "accel": 15,
+   "handling": 1.0,
+   "grip": 9,
+   "unlock_stars": 0,
+   "default_paint": 0,
+   "blurb": "Zippy little all-rounder. Great for beginners!"
+  },
+  {
+   "id": "zippy_taxi",
+   "name": "Zippy Taxi",
+   "model": "res://assets/kenney/cars/taxi.glb",
+   "model_scale": 1.75,
+   "model_yaw": 180,
+   "max_speed": 30,
+   "accel": 14,
+   "handling": 1.05,
+   "grip": 10,
+   "unlock_stars": 0,
+   "default_paint": 2,
+   "blurb": "Nippy and easy to steer around corners."
+  },
+  {
+   "id": "rocket_racer",
+   "name": "Rocket Racer",
+   "model": "res://assets/kenney/cars/race.glb",
+   "model_scale": 1.9,
+   "model_yaw": 180,
+   "max_speed": 38,
+   "accel": 18,
+   "handling": 0.9,
+   "grip": 8,
+   "unlock_stars": 12,
+   "default_paint": 5,
+   "blurb": "Super fast! Takes a steady hand."
+  },
+  {
+   "id": "bruno_suv",
+   "name": "Bruno SUV",
+   "model": "res://assets/kenney/cars/suv.glb",
+   "model_scale": 1.75,
+   "model_yaw": 180,
+   "max_speed": 29,
+   "accel": 13,
+   "handling": 1.1,
+   "grip": 11,
+   "unlock_stars": 25,
+   "default_paint": 4,
+   "blurb": "Big and sturdy. Sticks to the road like glue."
+  },
+  {
+   "id": "police_pup",
+   "name": "Police Pup",
+   "model": "res://assets/kenney/cars/police.glb",
+   "model_scale": 1.75,
+   "model_yaw": 180,
+   "max_speed": 34,
+   "accel": 16,
+   "handling": 1.0,
+   "grip": 9.5,
+   "unlock_stars": 30,
+   "default_paint": 0,
+   "blurb": "Quick and sharp. Catches everyone!"
+  },
+  {
+   "id": "sedan_sam",
+   "name": "Sedan Sam",
+   "model": "res://assets/kenney/cars/sedan.glb",
+   "model_scale": 1.75,
+   "model_yaw": 180,
+   "max_speed": 30,
+   "accel": 13,
+   "handling": 1.0,
+   "grip": 9.5,
+   "unlock_stars": 15,
+   "default_paint": 3,
+   "blurb": "A comfy family cruiser."
+  },
+  {
+   "id": "van_vinnie",
+   "name": "Van Vinnie",
+   "model": "res://assets/kenney/cars/van.glb",
+   "model_scale": 1.75,
+   "model_yaw": 180,
+   "max_speed": 26,
+   "accel": 11,
+   "handling": 0.9,
+   "grip": 8.5,
+   "unlock_stars": 20,
+   "default_paint": 6,
+   "blurb": "Roomy and bouncy."
+  },
+  {
+   "id": "delivery_dev",
+   "name": "Delivery Dev",
+   "model": "res://assets/kenney/cars/delivery.glb",
+   "model_scale": 1.75,
+   "model_yaw": 180,
+   "max_speed": 27,
+   "accel": 12,
+   "handling": 0.92,
+   "grip": 8.5,
+   "unlock_stars": 25,
+   "default_paint": 7,
+   "blurb": "Delivers fun to every lane."
+  },
+  {
+   "id": "ambulance_amy",
+   "name": "Ambulance Amy",
+   "model": "res://assets/kenney/cars/ambulance.glb",
+   "model_scale": 1.75,
+   "model_yaw": 180,
+   "max_speed": 29,
+   "accel": 13,
+   "handling": 0.95,
+   "grip": 9,
+   "unlock_stars": 40,
+   "default_paint": 1,
+   "blurb": "Make way, make way!"
+  },
+  {
+   "id": "fire_fred",
+   "name": "Fire Truck Fred",
+   "model": "res://assets/kenney/cars/firetruck.glb",
+   "model_scale": 1.9,
+   "model_yaw": 180,
+   "max_speed": 27,
+   "accel": 12,
+   "handling": 0.88,
+   "grip": 8.5,
+   "unlock_stars": 50,
+   "default_paint": 2,
+   "blurb": "Big, red and brave."
+  },
+  {
+   "id": "garbage_gus",
+   "name": "Garbage Gus",
+   "model": "res://assets/kenney/cars/garbage-truck.glb",
+   "model_scale": 1.9,
+   "model_yaw": 180,
+   "max_speed": 24,
+   "accel": 10,
+   "handling": 0.85,
+   "grip": 8,
+   "unlock_stars": 60,
+   "default_paint": 4,
+   "blurb": "Slow starter, tough as nails."
+  },
+  {
+   "id": "truck_tom",
+   "name": "Truck Tom",
+   "model": "res://assets/kenney/cars/truck.glb",
+   "model_scale": 1.9,
+   "model_yaw": 180,
+   "max_speed": 28,
+   "accel": 12,
+   "handling": 0.88,
+   "grip": 8.5,
+   "unlock_stars": 70,
+   "default_paint": 5,
+   "blurb": "Haulin' fast!"
+  },
+  {
+   "id": "sports_sia",
+   "name": "Sports Sia",
+   "model": "res://assets/kenney/cars/sedan-sports.glb",
+   "model_scale": 1.75,
+   "model_yaw": 180,
+   "max_speed": 38,
+   "accel": 18,
+   "handling": 1.1,
+   "grip": 10,
+   "unlock_stars": 90,
+   "default_paint": 8,
+   "blurb": "Low, fast and fun."
+  }
  ]
 }

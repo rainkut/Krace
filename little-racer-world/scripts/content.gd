@@ -51,7 +51,7 @@ func _load_pack(data_dir: String, root: String) -> void:
 	var r = _read_json(data_dir + "/races.json")
 	if typeof(r) == TYPE_DICTIONARY:
 		for e in r.get("races", []):
-			if e is Dictionary and e.has("id") and e.has("route") and e.has("town"):
+			if e is Dictionary and e.has("id") and (e.has("route") or e.has("route_xz")) and e.has("town"):
 				_merge_by_id(races, e)
 			else:
 				push_warning("Skipping invalid race entry in %s" % data_dir)
@@ -59,7 +59,7 @@ func _load_pack(data_dir: String, root: String) -> void:
 		for f in DirAccess.get_files_at(data_dir + "/towns"):
 			if f.ends_with(".json"):
 				var t = _read_json(data_dir + "/towns/" + f)
-				if typeof(t) == TYPE_DICTIONARY and t.has("map") and t.has("id"):
+				if typeof(t) == TYPE_DICTIONARY and (t.has("map") or t.has("world")) and t.has("id"):
 					towns[t["id"]] = t
 
 func _valid_vehicle(e: Variant) -> bool:

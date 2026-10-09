@@ -8,6 +8,7 @@
 | Drift (handbrake) | Space | - | DRIFT |
 | Horn | E | A (bottom button) | HONK |
 | Reset car to road | R | Y (top button) | RESET |
+| Minimap / full map | M | - | tap the minimap |
 | Pause | Esc | Start | II (top right) |
 
 Touch buttons are true multi-touch: steer and brake with different fingers at once.
