@@ -79,6 +79,7 @@ func build(town_data: Dictionary, _reserved: Dictionary = {}) -> void:
 	_world_roads()
 	_world_buildings()
 	_world_trees()
+	Compounds.build(self, road_polylines, _rng, _col_body, Settings.quality_level() == 2, func(p): return township != null and township.inside(p, 14.0), gen.get("buildings", []))
 	_world_poles()
 	StreetClutter.build(self, road_polylines, _rng, _col_body, Settings.quality_level() == 2, func(p): return township != null and township.inside(p, 14.0))
 	_world_landmarks()
@@ -446,7 +447,7 @@ func _world_roads() -> void:
 	var pm := _flat_mat(Color("cfc8b0"), 0.9)
 	pm.albedo_color = Color("cfc8b0")
 	_surface(paint, pm, false)
-	_surface(patches, _itex("asphalt012", 3.0, Color("6a665f"), 0.8), false)
+	_surface(patches, _itex("asphalt012", 3.0, Color("8d877d"), 0.8), false)
 	_speed_breakers()
 
 func _patch_road(st: SurfaceTool, pts: PackedVector2Array, w: float, y: float) -> void:
@@ -464,8 +465,13 @@ func _patch_road(st: SurfaceTool, pts: PackedVector2Array, w: float, y: float) -
 			var c0 := a + d * t + n * _rng.randf_range(-w * 0.3, w * 0.3)
 			var pw := _rng.randf_range(0.7, w * 0.45)
 			var pl := _rng.randf_range(1.2, 4.0)
-			_tri(st, c0 - d * pl * 0.5 + n * pw * 0.5, c0 + d * pl * 0.5 + n * pw * 0.5, c0 + d * pl * 0.5 - n * pw * 0.5, y, 1.0)
-			_tri(st, c0 - d * pl * 0.5 + n * pw * 0.5, c0 + d * pl * 0.5 - n * pw * 0.5, c0 - d * pl * 0.5 - n * pw * 0.5, y, 1.0)
+			var ring: Array[Vector2] = []
+			for k in 9:
+				var ang := TAU * float(k) / 9.0
+				var rr := _rng.randf_range(0.65, 1.0)
+				ring.append(c0 + d * cos(ang) * pl * 0.5 * rr + n * sin(ang) * pw * 0.5 * rr)
+			for k in 9:
+				_tri(st, c0, ring[k], ring[(k + 1) % 9], y, 1.0)
 			t += _rng.randf_range(6.0, 30.0)
 		next = t - L
 
@@ -638,8 +644,28 @@ func _world_trees() -> void:
 			cs.shape = shape
 			cs.position = Vector3(p.x, 3.0, p.z)
 			_col_body.add_child(cs)
-	for kind in by_kind:
-		_scatter("res://assets/kenney/nature/%s.glb" % kind, by_kind[kind])
+	var tmeshes := Compounds.tree_meshes()
+	for v in tmeshes.size():
+		var xf: Array = []
+		for k in by_kind:
+			if TREE_MODELS.find(k) % 3 == v:
+				xf.append_array(by_kind[k])
+		_scatter_mesh(tmeshes[v], xf)
+
+func _scatter_mesh(mesh: Mesh, xforms: Array) -> void:
+	if xforms.is_empty():
+		return
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = xforms.size()
+	for i in xforms.size():
+		mm.set_instance_transform(i, xforms[i])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.visibility_range_end = 600.0 if Settings.quality_level() == 2 else 420.0
+	mmi.custom_aabb = AABB(Vector3(bounds.position.x - 100.0, -2.0, bounds.position.y - 100.0), Vector3(bounds.size.x + 200.0, 30.0, bounds.size.y + 200.0))
+	add_child(mmi)
 
 func _world_poles() -> void:
 	var cyl := CylinderMesh.new()

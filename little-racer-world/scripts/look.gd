@@ -58,6 +58,7 @@ static func add_to(parent: Node, shadows: bool, shadow_dist := 140.0) -> void:
 	var we := WorldEnvironment.new()
 	we.environment = env
 	parent.add_child(we)
+	Compounds.add_clouds(parent, Settings.time_of_day)
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(float(tod[0]), float(tod[1]), 0)
 	sun.light_energy = float(tod[2])
