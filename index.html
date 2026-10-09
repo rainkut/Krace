@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Krace</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #8fd46b; font-family: "Trebuchet MS", Arial, sans-serif; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- config.js holds everything you can change. It must load BEFORE the game code below. -->
+<script src="config.js"></script>
+<script>
+// =====================================================================
+//  KRACE ENGINE  (Stage 1: drive a car around a city)
+//  You do not need to edit this file to change the game -- use config.js.
+//  Read the comments if you want to see how it works!
+// =====================================================================
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const TS = CONFIG.tileSize;                    // tile size, short name
+const MAP = CONFIG.city;                       // the city map (array of text rows)
+const MAP_W = MAP[0].length, MAP_H = MAP.length;
+
+// ---------------------------------------------------------------------
+//  1. KEYBOARD
+//  We remember which keys are held down right now.
+// ---------------------------------------------------------------------
+const keys = {};
+addEventListener("keydown", e => {
+  keys[e.code] = true;
+  if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault(); // stop page scrolling
+});
+addEventListener("keyup", e => { keys[e.code] = false; });
+
+// Easy questions the car can ask: "is the player pressing up?"
+const pressing = {
+  up:    () => keys.ArrowUp    || keys.KeyW,
+  down:  () => keys.ArrowDown  || keys.KeyS,
+  left:  () => keys.ArrowLeft  || keys.KeyA,
+  right: () => keys.ArrowRight || keys.KeyD,
+};
+
+// ---------------------------------------------------------------------
+//  2. THE MAP
+// ---------------------------------------------------------------------
+// What kind of tile is at this tile position? (outside the map counts as a tree wall)
+function tileAt(tx, ty) {
+  if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return CONFIG.tiles["T"];
+  return CONFIG.tiles[MAP[ty][tx]] || CONFIG.tiles["."];
+}
+// Same, but from a position in pixels
+function tileAtPixel(px, py) { return tileAt(Math.floor(px / TS), Math.floor(py / TS)); }
+function isRoad(tx, ty) { return !!tileAt(tx, ty).road; }
+
+// A simple "random" number from a tile position, so every building keeps the same look
+function tileRandom(tx, ty) { const n = Math.sin(tx * 127.1 + ty * 311.7) * 43758.5453; return n - Math.floor(n); }
+
+// ---------------------------------------------------------------------
+//  3. THE CAR
+// ---------------------------------------------------------------------
+// Pick the car: ?car=speedy-blue in the web address, otherwise CONFIG.startCar
+const wanted = new URLSearchParams(location.search).get("car") || CONFIG.startCar;
+const carType = CONFIG.cars.find(c => c.id === wanted) || CONFIG.cars[0];
+
+// If the car has its own PNG picture, load it
+let carImage = null;
+if (carType.image) { carImage = new Image(); carImage.src = carType.image; }
+
+const car = {
+  x: CONFIG.start.tileX * TS,                  // position in pixels
+  y: CONFIG.start.tileY * TS,
+  angle: CONFIG.start.angleDegrees * Math.PI / 180,  // direction (radians), 0 = facing right
+  speed: 0,                                    // how fast we move forward (negative = reversing)
+  wobble: 0,                                   // little shake after a bump
+};
+
+// Is the car (placed at x,y facing angle) touching something solid?
+// We check a few points around the car's body.
+function carHitsSolid(x, y, angle) {
+  const hw = carType.size.w / 2 * 0.9, hh = carType.size.h / 2 * 0.9;
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const points = [[hh, 0], [-hh, 0], [hh, hw], [hh, -hw], [-hh, hw], [-hh, -hw], [0, hw], [0, -hw]];
+  for (const [fwd, side] of points) {
+    // turn the car-relative point into a map point
+    const px = x + cos * fwd - sin * side;
+    const py = y + sin * fwd + cos * side;
+    if (tileAtPixel(px, py).solid) return true;
+  }
+  return false;
+}
+
+// Little yellow stars that pop out when we bump into something
+const sparks = [];
+function bump() {
+  if (Math.abs(car.speed) > 40) {
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2;
+      sparks.push({ x: car.x, y: car.y, vx: Math.cos(a) * 120, vy: Math.sin(a) * 120, life: 0.5 });
+    }
+    car.wobble = 0.35;
+  }
+  // A soft bounce: go the other way a little (never any damage!)
+  car.speed = -car.speed * CONFIG.physics.bounce;
+}
+
+function updateCar(dt) {
+  const P = CONFIG.physics;
+  const onGrass = !tileAtPixel(car.x, car.y).road;
+  const topSpeed = carType.speed * (onGrass ? P.grassSlowdown : 1);
+
+  // --- speed up, brake or coast ---
+  if (pressing.up()) {
+    car.speed += carType.accel * dt;
+  } else if (pressing.down()) {
+    car.speed -= (car.speed > 0 ? P.brake : carType.accel) * dt;   // brake first, then reverse
+  } else {
+    // let go of the keys: slowly roll to a stop
+    const slow = P.friction * dt;
+    car.speed = Math.abs(car.speed) <= slow ? 0 : car.speed - Math.sign(car.speed) * slow;
+  }
+  car.speed = Math.max(-topSpeed * P.reverseSpeedShare, Math.min(topSpeed, car.speed));
+
+  // --- steer (only works while moving, like a real car) ---
+  const steerInput = (pressing.right() ? 1 : 0) - (pressing.left() ? 1 : 0);
+  const grip = Math.max(-1, Math.min(1, car.speed / (carType.speed * 0.3)));
+  const newAngle = car.angle + steerInput * carType.turning * grip * dt;
+  if (!carHitsSolid(car.x, car.y, newAngle)) car.angle = newAngle;
+
+  // --- move, one direction at a time so we can slide along walls ---
+  const nx = car.x + Math.cos(car.angle) * car.speed * dt;
+  const ny = car.y + Math.sin(car.angle) * car.speed * dt;
+  let hit = false;
+  if (!carHitsSolid(nx, car.y, car.angle)) car.x = nx; else hit = true;
+  if (!carHitsSolid(car.x, ny, car.angle)) car.y = ny; else hit = true;
+  if (hit) bump();
+
+  if (car.wobble > 0) car.wobble -= dt;
+}
+
+function updateSparks(dt) {
+  for (const s of sparks) { s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt; }
+  for (let i = sparks.length - 1; i >= 0; i--) if (sparks[i].life <= 0) sparks.splice(i, 1);
+}
+
+// ---------------------------------------------------------------------
+//  4. THE CAMERA
+//  It glides after the car and never shows past the edge of the city.
+// ---------------------------------------------------------------------
+const camera = { x: car.x, y: car.y, scale: 1 };
+
+function updateCamera(dt) {
+  // zoom so that about CONFIG.tilesAcrossView tiles fit across the short side
+  camera.scale = Math.min(canvas.width, canvas.height) / (CONFIG.tilesAcrossView * TS);
+  const viewW = canvas.width / camera.scale, viewH = canvas.height / camera.scale;
+  // glide toward the car
+  const follow = 1 - Math.pow(0.001, dt);
+  camera.x += (car.x - camera.x) * follow;
+  camera.y += (car.y - camera.y) * follow;
+  // stay inside the city (if the city is smaller than the screen, center it)
+  const halfW = viewW / 2, halfH = viewH / 2;
+  camera.x = MAP_W * TS <= viewW ? MAP_W * TS / 2 : Math.max(halfW, Math.min(MAP_W * TS - halfW, camera.x));
+  camera.y = MAP_H * TS <= viewH ? MAP_H * TS / 2 : Math.max(halfH, Math.min(MAP_H * TS - halfH, camera.y));
+}
+
+// ---------------------------------------------------------------------
+//  5. DRAWING
+// ---------------------------------------------------------------------
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+// Draw one map square at tile (tx, ty)
+function drawTile(tx, ty) {
+  const t = tileAt(tx, ty), ch = MAP[ty][tx], x = tx * TS, y = ty * TS;
+  ctx.fillStyle = t.color; ctx.fillRect(x, y, TS + 1, TS + 1);
+
+  if (t.road) {
+    // road edges (a light kerb where the road meets grass)
+    ctx.fillStyle = "#c9ced6";
+    const k = 6;
+    if (!isRoad(tx, ty - 1)) ctx.fillRect(x, y, TS, k);
+    if (!isRoad(tx, ty + 1)) ctx.fillRect(x, y + TS - k, TS, k);
+    if (!isRoad(tx - 1, ty)) ctx.fillRect(x, y, k, TS);
+    if (!isRoad(tx + 1, ty)) ctx.fillRect(x + TS - k, y, k, TS);
+    // dashed yellow line down the middle of straight roads
+    const up = isRoad(tx, ty - 1), down = isRoad(tx, ty + 1), left = isRoad(tx - 1, ty), right = isRoad(tx + 1, ty);
+    ctx.fillStyle = "#ffe14d";
+    if (left && right && down && !up) for (let i = 0; i < 2; i++) ctx.fillRect(x + 8 + i * 32, y + TS - 3, 20, 6);   // horizontal road
+    if (up && down && right && !left) for (let i = 0; i < 2; i++) ctx.fillRect(x + TS - 3, y + 8 + i * 32, 6, 20);   // vertical road
+  } else if (ch === "W") {
+    // water: blue with a few light wave marks
+    ctx.fillStyle = "#4fb3f0"; ctx.fillRect(x, y, TS + 1, TS + 1);
+    ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x + 10, y + 22); ctx.quadraticCurveTo(x + 22, y + 14, x + 34, y + 22); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 28, y + 46); ctx.quadraticCurveTo(x + 40, y + 38, x + 52, y + 46); ctx.stroke();
+  } else if (ch === "T") {
+    // tree: shadow, brown trunk, round green top
+    ctx.fillStyle = "rgba(0,0,0,0.15)"; ctx.beginPath(); ctx.ellipse(x + TS / 2 + 5, y + TS / 2 + 8, 22, 18, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#8d5a2b"; ctx.fillRect(x + TS / 2 - 4, y + TS / 2 + 2, 8, 20);
+    ctx.fillStyle = "#2e9e4f"; ctx.beginPath(); ctx.arc(x + TS / 2, y + TS / 2 - 4, 24, 0, 7); ctx.fill();
+    ctx.fillStyle = "#47c26a"; ctx.beginPath(); ctx.arc(x + TS / 2 - 7, y + TS / 2 - 11, 11, 0, 7); ctx.fill();
+  } else if (ch === "B") {
+    // building: seen from above -- a colourful roof with windows
+    const colors = CONFIG.buildingColors;
+    const color = colors[Math.floor(tileRandom(tx, ty) * colors.length)];
+    ctx.fillStyle = "rgba(0,0,0,0.18)"; roundRect(x + 8, y + 8, TS - 4, TS - 4, 10); ctx.fill();   // shadow
+    ctx.fillStyle = color; roundRect(x + 2, y + 2, TS - 6, TS - 6, 10); ctx.fill();               // roof
+    ctx.fillStyle = "rgba(255,255,255,0.55)";                                                    // windows
+    ctx.fillRect(x + 12, y + 12, 14, 14); ctx.fillRect(x + 34, y + 12, 14, 14);
+    ctx.fillRect(x + 12, y + 34, 14, 14); ctx.fillRect(x + 34, y + 34, 14, 14);
+  }
+}
+
+// Draw the car (and its own PNG picture if it has one). We draw it facing RIGHT at angle 0.
+function drawCar() {
+  const w = carType.size.w, h = carType.size.h;     // w = width (side to side), h = length (nose to tail)
+  ctx.save();
+  ctx.translate(car.x, car.y);
+  ctx.rotate(car.angle);
+  const squash = 1 + Math.sin(car.wobble * 40) * Math.max(0, car.wobble) * 0.3;   // jelly wobble after a bump
+  ctx.scale(squash, 1 / squash);
+
+  // soft shadow
+  ctx.fillStyle = "rgba(0,0,0,0.2)"; roundRect(-h / 2 + 3, -w / 2 + 4, h, w, 8); ctx.fill();
+
+  if (carImage && carImage.complete && carImage.naturalWidth) {
+    // your own picture: it is drawn pointing UP, so turn it a quarter to point along the car
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(carImage, -w / 2, -h / 2, w, h);
+  } else {
+    drawCartoonCar(w, h);
+  }
+  ctx.restore();
+}
+
+// The built-in cartoon cars. Nose points to the RIGHT (+x), so length runs along x.
+function drawCartoonCar(w, h) {
+  const L = h, W = w;                         // L = length, W = width
+  const dark = "#2b2b2b";
+  const shape = carType.shape;
+
+  if (shape === "rickshaw") {
+    // little 3-wheeler: body + canopy + one front wheel
+    ctx.fillStyle = dark; ctx.fillRect(-L / 2, -W / 2 - 2, 10, 6); ctx.fillRect(-L / 2, W / 2 - 4, 10, 6); ctx.fillRect(L / 2 - 10, -3, 10, 6);
+    ctx.fillStyle = carType.color; roundRect(-L / 2, -W / 2, L * 0.9, W, 10); ctx.fill();
+    ctx.fillStyle = "#222"; roundRect(-L / 2 + 2, -W / 2 + 3, L * 0.55, W - 6, 8); ctx.fill();   // black canopy
+    ctx.fillStyle = "#cfefff"; roundRect(L * 0.1, -W / 2 + 5, 8, W - 10, 3); ctx.fill();          // windscreen
+    ctx.fillStyle = "#fff59d"; ctx.beginPath(); ctx.arc(L / 2 - 1, 0, 3, 0, 7); ctx.fill();       // headlight
+    return;
+  }
+
+  // wheels (four small dark blocks sticking out at the sides)
+  ctx.fillStyle = dark;
+  for (const fx of [-0.3, 0.3]) for (const s of [-1, 1]) ctx.fillRect(fx * L - 7, s * (W / 2) - (s > 0 ? 2 : 3), 14, 5);
+
+  if (shape === "truck") {
+    // cab at the front (right), big cargo box at the back (left)
+    ctx.fillStyle = "#e8e8e8"; roundRect(-L / 2, -W / 2, L * 0.62, W, 6); ctx.fill();
+    ctx.fillStyle = carType.color; roundRect(-L / 2 + 4, -W / 2 + 4, L * 0.62 - 8, W - 8, 4); ctx.fill();
+    ctx.fillStyle = carType.color; roundRect(L * 0.14, -W / 2, L * 0.36, W, 8); ctx.fill();       // cab
+    ctx.fillStyle = "#cfefff"; roundRect(L * 0.34, -W / 2 + 5, 9, W - 10, 3); ctx.fill();         // windscreen
+  } else {
+    // car or taxi body
+    ctx.fillStyle = carType.color; roundRect(-L / 2, -W / 2, L, W, 12); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.35)"; roundRect(-L / 2 + 5, -W / 2 + 3, L - 18, 5, 3); ctx.fill();   // shiny stripe
+    ctx.fillStyle = "#cfefff"; roundRect(L * 0.08, -W / 2 + 4, L * 0.2, W - 8, 4); ctx.fill();    // front window
+    ctx.fillStyle = "#a8d8ee"; roundRect(-L * 0.32, -W / 2 + 4, L * 0.16, W - 8, 4); ctx.fill();  // back window
+    ctx.fillStyle = carType.color; ctx.filter = "brightness(0.85)"; roundRect(-L * 0.16, -W / 2 + 3, L * 0.24, W - 6, 5); ctx.fill(); ctx.filter = "none"; // roof
+    if (shape === "taxi") { ctx.fillStyle = "#fff"; roundRect(-L * 0.08, -6, 12, 12, 3); ctx.fill(); ctx.fillStyle = "#222"; ctx.fillRect(-L * 0.08 + 3, -2, 6, 4); } // roof sign
+  }
+  // headlights
+  ctx.fillStyle = "#fff59d";
+  ctx.beginPath(); ctx.arc(L / 2 - 2, -W / 2 + 6, 3.5, 0, 7); ctx.arc(L / 2 - 2, W / 2 - 6, 3.5, 0, 7); ctx.fill();
+}
+
+function drawSparks() {
+  ctx.fillStyle = "#ffd600";
+  for (const s of sparks) {
+    ctx.globalAlpha = Math.max(0, s.life * 2);
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {                    // a tiny 5-point star
+      const r = i % 2 ? 4 : 9, a = i * Math.PI / 5;
+      ctx.lineTo(s.x + Math.cos(a) * r, s.y + Math.sin(a) * r);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function draw() {
+  ctx.fillStyle = "#6fbf4d"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  // move the "world" so the camera is in the middle of the screen
+  ctx.scale(camera.scale, camera.scale);
+  ctx.translate(canvas.width / camera.scale / 2 - camera.x, canvas.height / camera.scale / 2 - camera.y);
+
+  // only draw the tiles we can actually see
+  const viewW = canvas.width / camera.scale, viewH = canvas.height / camera.scale;
+  const x0 = Math.max(0, Math.floor((camera.x - viewW / 2) / TS)), x1 = Math.min(MAP_W - 1, Math.floor((camera.x + viewW / 2) / TS));
+  const y0 = Math.max(0, Math.floor((camera.y - viewH / 2) / TS)), y1 = Math.min(MAP_H - 1, Math.floor((camera.y + viewH / 2) / TS));
+  for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) drawTile(tx, ty);
+
+  drawCar();
+  drawSparks();
+  ctx.restore();
+
+  // a little title / help text at the top
+  ctx.fillStyle = "rgba(0,0,0,0.45)"; roundRect(12, 12, 340, 54, 14); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.font = "bold 22px 'Trebuchet MS', Arial"; ctx.fillText(CONFIG.title + " - " + carType.name, 26, 36);
+  ctx.font = "15px 'Trebuchet MS', Arial"; ctx.fillText("Arrow keys or W A S D to drive", 26, 56);
+}
+
+// ---------------------------------------------------------------------
+//  6. THE GAME LOOP
+//  The browser calls this about 60 times a second.
+// ---------------------------------------------------------------------
+function resize() { canvas.width = innerWidth; canvas.height = innerHeight; }
+addEventListener("resize", resize); resize();
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);   // seconds since last frame (capped so lag can't teleport us)
+  last = now;
+  updateCar(dt);
+  updateSparks(dt);
+  updateCamera(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
