@@ -8,21 +8,65 @@ var vehicles: Array = []
 var races: Array = []
 var towns := {}
 var paints: Array = []
+var parts := {"wheels": [], "spoilers": [], "extras": []}
 var launch := {}   # set by the menu before switching to the game scene: {mode, race_id}
 var mod_names: Array = []
+var mod_reports: Array = []   # one dict per mod folder, see ModLoader.inspect + status
 var _model_cache := {}
 
 func _ready() -> void:
 	reload()
 
 func reload() -> void:
-	vehicles.clear(); races.clear(); towns.clear(); paints.clear(); mod_names.clear()
+	vehicles.clear(); races.clear(); towns.clear(); paints.clear(); parts = {"wheels": [], "spoilers": [], "extras": []}; mod_names.clear()
+	mod_reports.clear()
 	_load_pack("res://data", "res://")
-	if DirAccess.dir_exists_absolute(MODS_DIR):
-		for d in DirAccess.get_directories_at(MODS_DIR):
-			var base := MODS_DIR + "/" + d
-			_load_pack(base + "/data", base + "/")
-			mod_names.append(d)
+	for rep in ModLoader.discover():
+		_register_mod(rep)
+
+## Validates a discovered mod and, if it is enabled and error-free, merges it into the content lists.
+func _register_mod(rep: Dictionary) -> void:
+	var key := str(rep["folder"])
+	rep["status"] = "ok"
+	for other in mod_reports:
+		if rep["errors"].is_empty() and other["id"] == rep["id"] and not rep["legacy"]:
+			rep["errors"].append("Duplicate mod id \"%s\" (also used by folder \"%s\")." % [rep["id"], other["folder"]])
+	if rep["errors"].is_empty():
+		ModLoader.validate(rep, _taken())
+	if not rep["errors"].is_empty():
+		rep["status"] = "error"
+	elif Settings.mods_safe_mode or key in Settings.disabled_mods:
+		rep["status"] = "disabled"
+	else:
+		_apply_pack(rep["pack"])
+		mod_names.append(rep["name"])
+	rep["counts"] = {"vehicles": rep["pack"].get("vehicles", []).size(), "races": rep["pack"].get("races", []).size(),
+		"towns": rep["pack"].get("towns", {}).size()}
+	mod_reports.append(rep)
+
+func _taken() -> Dictionary:
+	var t := {"vehicles": {}, "races": {}, "towns": {}, "wheels": {}, "spoilers": {}, "extras": {}}
+	for v in vehicles: t["vehicles"][v["id"]] = true
+	for r in races: t["races"][r["id"]] = true
+	for k in towns: t["towns"][k] = true
+	for kind in ["wheels", "spoilers", "extras"]:
+		for p in parts[kind]: t[kind][p["id"]] = true
+	# Ids from enabled-or-not mods processed earlier are tracked through the lists above only when applied;
+	# disabled/errored mods do not reserve ids.
+	return t
+
+func _apply_pack(pack: Dictionary) -> void:
+	for e in pack.get("vehicles", []):
+		_merge_by_id(vehicles, e)
+	for e in pack.get("races", []):
+		_merge_by_id(races, e)
+	for k in pack.get("towns", {}):
+		towns[k] = pack["towns"][k]
+	for e in pack.get("paints", []):
+		paints.append(e)
+	for kind in ["wheels", "spoilers", "extras"]:
+		for e in pack["parts"][kind]:
+			_merge_by_id(parts[kind], e)
 
 func _read_json(path: String) -> Variant:
 	if not FileAccess.file_exists(path):
@@ -48,6 +92,12 @@ func _load_pack(data_dir: String, root: String) -> void:
 			if _valid_vehicle(e):
 				e["_root"] = root
 				_merge_by_id(vehicles, e)
+	var pj = _read_json(data_dir + "/parts.json")
+	if typeof(pj) == TYPE_DICTIONARY:
+		for kind in ["wheels", "spoilers", "extras"]:
+			for e in pj.get(kind, []):
+				if e is Dictionary and e.has("id"):
+					_merge_by_id(parts[kind], e)
 	var r = _read_json(data_dir + "/races.json")
 	if typeof(r) == TYPE_DICTIONARY:
 		for e in r.get("races", []):
@@ -128,3 +178,9 @@ func _fix_node_materials(n: Node, nature: bool) -> void:
 					mat.albedo_color = Color("7a5236")
 	for c in n.get_children():
 		_fix_node_materials(c, nature)
+
+func get_part(kind: String, id: String) -> Dictionary:
+	for p in parts.get(kind, []):
+		if p["id"] == id:
+			return p
+	return {}

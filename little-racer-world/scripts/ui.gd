@@ -2,9 +2,12 @@ class_name UI
 extends RefCounted
 ## Small UI helpers: a shared chunky, touch-friendly theme and widget builders.
 
+static func fs(size: int) -> int:
+	return int(size * 1.25) if Settings.large_text else size
+
 static func make_theme() -> Theme:
 	var t := Theme.new()
-	t.default_font_size = 30
+	t.default_font_size = fs(30)
 	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 		var sb := StyleBoxFlat.new()
 		sb.set_corner_radius_all(18)
@@ -46,7 +49,7 @@ static func button(text: String, cb: Callable, min_size := Vector2(360, 76)) -> 
 static func label(text: String, size := 30, color := Color.WHITE) -> Label:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_font_size_override("font_size", fs(size))
 	l.add_theme_color_override("font_color", color)
 	return l
 

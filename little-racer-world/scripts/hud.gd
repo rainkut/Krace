@@ -148,8 +148,29 @@ func _make_pause() -> Control:
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(t)
 	v.add_child(UI.button("Resume", func(): resume_requested.emit()))
-	v.add_child(UI.button("Restart", func(): restart_requested.emit()))
-	v.add_child(UI.button("Main Menu", func(): menu_requested.emit()))
+	var armed := {"restart": false, "menu": false}
+	var rb := UI.button("Restart", func(): pass)
+	var mb := UI.button("Main Menu", func(): pass)
+	for pair in [[rb, "restart", "Restart", restart_requested], [mb, "menu", "Main Menu", menu_requested]]:
+		var btn: Button = pair[0]
+		var key: String = pair[1]
+		var label: String = pair[2]
+		var sig: Signal = pair[3]
+		btn.pressed.connect(func():
+			if armed[key]:
+				sig.emit()
+				return
+			armed["restart"] = false
+			armed["menu"] = false
+			armed[key] = true
+			rb.text = "Restart"
+			mb.text = "Main Menu"
+			btn.text = "Tap again to confirm"
+			get_tree().create_timer(2.5, true, false, true).timeout.connect(func():
+				armed[key] = false
+				btn.text = label))
+	v.add_child(rb)
+	v.add_child(mb)
 	wrap.visible = false
 	return wrap
 

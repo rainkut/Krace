@@ -1,0 +1,20 @@
+{
+ "wheels": [
+  {"id": "stock", "name": "Stock", "color": ""},
+  {"id": "gold", "name": "Gold caps", "color": "#ffc21f", "unlock_stars": 5},
+  {"id": "chrome", "name": "Chrome caps", "color": "#d7dde6", "unlock_races": 2},
+  {"id": "neon", "name": "Neon green caps", "color": "#39ff5a", "unlock_stars": 15}
+ ],
+ "spoilers": [
+  {"id": "none", "name": "None"},
+  {"id": "lip", "name": "Boot lip", "unlock_stars": 3},
+  {"id": "wing", "name": "Racing wing", "unlock_races": 1},
+  {"id": "tall", "name": "Tall wing", "unlock_stars": 20}
+ ],
+ "extras": [
+  {"id": "none", "name": "None"},
+  {"id": "stripe", "name": "Twin stripe", "unlock_stars": 2},
+  {"id": "flag", "name": "Roof flag", "unlock_races": 3},
+  {"id": "star", "name": "Star decal", "unlock_stars": 10}
+ ]
+}

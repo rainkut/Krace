@@ -14,8 +14,19 @@ var use_mph := false
 var difficulty := 1  # 0 easy, 1 normal, 2 hard
 var force_touch := false
 var traffic := 2  # 0 off, 1 light, 2 normal, 3 busy
+var large_text := false
+var reduced_motion := false
+var simple_steering := false
+var cam_sensitivity := 1.0
 var quality := 0  # 0 auto, 1 normal, 2 high
 var time_of_day := 1  # 0 morning, 1 noon, 2 evening, 3 dusk
+var disabled_mods: Array = []   # mod folder names switched off in Parent settings
+var mods_safe_mode := false     # true = ignore every mod (base game only)
+
+const LOCK := "user://session.lock"
+const BACKUP := "user://settings.backup.cfg"
+var notices: Array = []   # one-time messages for the menu (recovery events)
+var _in_game := false
 
 const TOD_NAMES := ["Morning", "Noon", "Evening", "Dusk"]
 
@@ -24,6 +35,45 @@ const DIFFICULTY_SCALE := [0.80, 0.90, 1.0]
 
 func _ready() -> void:
 	load_settings()
+	apply()
+	if FileAccess.file_exists(LOCK):
+		DirAccess.remove_absolute(LOCK)
+		if _any_mod_folder() and not mods_safe_mode:
+			mods_safe_mode = true
+			save_settings()
+			notices.append("The game closed unexpectedly last time while mods were installed, so all mods were switched off. Re-enable them in Parents > Mods.")
+
+func _any_mod_folder() -> bool:
+	for d in ModLoader.search_dirs():
+		if DirAccess.dir_exists_absolute(d) and not DirAccess.get_directories_at(d).is_empty():
+			return true
+	return false
+
+## Called by the game scene when a race/free-roam begins and by the menu when it opens.
+func session_begin() -> void:
+	_in_game = true
+	var f := FileAccess.open(LOCK, FileAccess.WRITE)
+	if f:
+		f.store_string("1")
+
+func session_end() -> void:
+	_in_game = false
+	if FileAccess.file_exists(LOCK):
+		DirAccess.remove_absolute(LOCK)
+
+func _notification(what: int) -> void:
+	# Backgrounding is not a crash: drop the lock while paused, re-arm when resumed in-game.
+	if what == NOTIFICATION_APPLICATION_PAUSED and FileAccess.file_exists(LOCK):
+		DirAccess.remove_absolute(LOCK)
+	elif what == NOTIFICATION_APPLICATION_RESUMED and _in_game:
+		session_begin()
+
+func reset_to_defaults() -> void:
+	var keep_mods := disabled_mods
+	sfx_volume = 0.8; auto_accelerate = true; tilt_steering = false; tilt_invert = false; tilt_sensitivity = 1.0
+	shadows = true; use_mph = false; difficulty = 1; force_touch = false; traffic = 2; quality = 0; time_of_day = 1
+	disabled_mods = keep_mods
+	save_settings()
 	apply()
 
 func ai_scale() -> float:
@@ -61,7 +111,12 @@ func touch_enabled() -> bool:
 
 func load_settings() -> void:
 	var cf := ConfigFile.new()
-	if cf.load(PATH) != OK:
+	var err := cf.load(PATH)
+	if err == ERR_FILE_NOT_FOUND or err == ERR_CANT_OPEN:
+		return
+	if err != OK:
+		DirAccess.rename_absolute(PATH, "user://settings.corrupt.cfg")
+		notices.append("Your settings file was damaged, so settings were reset to defaults (a copy was kept as settings.corrupt.cfg).")
 		return
 	sfx_volume = clampf(cf.get_value("audio", "sfx_volume", sfx_volume), 0.0, 1.0)
 	auto_accelerate = cf.get_value("controls", "auto_accelerate", auto_accelerate)
@@ -75,6 +130,13 @@ func load_settings() -> void:
 	traffic = clampi(int(cf.get_value("game", "traffic", traffic)), 0, 3)
 	quality = clampi(int(cf.get_value("video", "quality", quality)), 0, 2)
 	time_of_day = clampi(int(cf.get_value("video", "time_of_day", time_of_day)), 0, 3)
+	large_text = bool(cf.get_value("access", "large_text", large_text))
+	reduced_motion = bool(cf.get_value("access", "reduced_motion", reduced_motion))
+	simple_steering = bool(cf.get_value("access", "simple_steering", simple_steering))
+	cam_sensitivity = clampf(float(cf.get_value("access", "cam_sensitivity", cam_sensitivity)), 0.5, 1.6)
+	var dm = cf.get_value("mods", "disabled", [])
+	disabled_mods = Array(dm) if dm is Array else []
+	mods_safe_mode = bool(cf.get_value("mods", "safe_mode", false))
 
 func save_settings() -> void:
 	var cf := ConfigFile.new()
@@ -90,6 +152,12 @@ func save_settings() -> void:
 	cf.set_value("game", "traffic", traffic)
 	cf.set_value("video", "quality", quality)
 	cf.set_value("video", "time_of_day", time_of_day)
+	cf.set_value("access", "large_text", large_text)
+	cf.set_value("access", "reduced_motion", reduced_motion)
+	cf.set_value("access", "simple_steering", simple_steering)
+	cf.set_value("access", "cam_sensitivity", cam_sensitivity)
+	cf.set_value("mods", "disabled", disabled_mods)
+	cf.set_value("mods", "safe_mode", mods_safe_mode)
 	cf.save(PATH)
 
 func apply() -> void:

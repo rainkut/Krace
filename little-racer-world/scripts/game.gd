@@ -44,6 +44,7 @@ var _off_t := 0.0
 var _recover_cd := 0.0
 
 func _ready() -> void:
+	Settings.session_begin()
 	var launch := Content.launch
 	mode = str(launch.get("mode", "race"))
 	autodrive = bool(launch.get("autodrive", false))
@@ -119,6 +120,7 @@ func _ready() -> void:
 		hud.show_message("Free roam!  Collect the stars", 2.2)
 
 func _exit_tree() -> void:
+	Settings.session_end()
 	get_tree().paused = false
 	Sfx.stop_engine()
 	if touch:
@@ -200,8 +202,8 @@ func _prepare_route(town_data: Dictionary) -> void:
 		route.append(Vector3(ox + (c.x + 0.5) * cell, 0.0, oz + (c.y + 0.5) * cell))
 		route_cells[c] = true
 
-func _make_vehicle(vehicle_id: String, paint: int) -> Vehicle:
-	var v := Vehicle.create(Content.get_vehicle(vehicle_id), paint)
+func _make_vehicle(vehicle_id: String, paint: int, parts: Dictionary = {}) -> Vehicle:
+	var v := Vehicle.create(Content.get_vehicle(vehicle_id), paint, parts)
 	add_child(v)
 	v.road_query = Callable(town, "is_road_at")
 	return v
@@ -215,7 +217,7 @@ func _spawn_vehicles(town_data: Dictionary) -> void:
 	if not Save.is_unlocked(def):
 		car_id = "sunny_hatch"
 		def = Content.get_vehicle(car_id)
-	player = _make_vehicle(car_id, Save.paint_for(car_id, int(def.get("default_paint", 0))))
+	player = _make_vehicle(car_id, Save.paint_for(car_id, int(def.get("default_paint", 0))), Save.active_parts(car_id))
 	var spawn_dir := Vector3(1, 0, 0)
 	var spawn_pos := Vector3.ZERO
 	if osm != null:
@@ -509,7 +511,9 @@ func _drive_player(dt: float) -> void:
 		if Settings.tilt_invert:
 			tilt = -tilt
 		target = clampf(tilt * 1.5, -1.0, 1.0) if absf(tilt) > 0.05 else 0.0
-	var rate := 6.5 if absf(target) > absf(player.steer) else 10.0
+	if Settings.simple_steering:
+		target *= 0.6 if absf(player.linear_velocity.length()) > 18.0 else 0.8
+	var rate := (3.5 if Settings.simple_steering else 6.5) if absf(target) > absf(player.steer) else 10.0
 	player.steer = move_toward(player.steer, target, rate * dt)
 	player.throttle = th
 	player.brake = br
@@ -786,6 +790,10 @@ func _setup_osm_extras() -> void:
 			minimap.targets_fn = func(): return route[int(_player_racer["count"]) % route.size()]
 	layer.add_child(minimap)
 	add_child(layer)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST and state != "finished":
+		_set_paused(not _paused)
 
 func _unhandled_input(e: InputEvent) -> void:
 	if minimap != null and e is InputEventKey and e.pressed and not e.echo and e.keycode == KEY_M:

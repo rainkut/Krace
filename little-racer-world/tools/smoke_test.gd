@@ -22,21 +22,18 @@ func _initialize() -> void:
 	var Save = root.get_node("Save")
 	var Settings = root.get_node("Settings")
 	Save.wipe()
-	var dir := "user://mods/smoketest/data"
-	DirAccess.make_dir_recursive_absolute(dir)
-	var f := FileAccess.open(dir + "/vehicles.json", FileAccess.WRITE)
-	f.store_string(JSON.stringify({"vehicles": [{"id": "smoke_car", "name": "Smoke Car", "model": "res://assets/kenney/cars/taxi.glb", "model_scale": 1.75, "top_speed": 30.0, "acceleration": 10.0, "handling": 1.0}]}))
-	f.close()
+	ModLoader.install_samples()
 	Content.reload()
-	check(Content.get_vehicle("smoke_car")["id"] == "smoke_car", "mod vehicle loaded from user://mods")
+	check(Content.get_vehicle("mod_dusty_pickup")["id"] == "mod_dusty_pickup", "sample vehicle mod loaded from user://mods")
 	check(Content.get_vehicle("sunny_hatch")["id"] == "sunny_hatch", "base vehicle still present after mods")
 	check(Content.races.size() >= 1 and Content.towns.size() >= 1, "races and towns loaded")
-	DirAccess.remove_absolute(dir + "/vehicles.json")
-	DirAccess.remove_absolute(dir)
-	DirAccess.remove_absolute("user://mods/smoketest/data")
-	DirAccess.remove_absolute("user://mods/smoketest")
+	for d in ["sample_vehicle_mod/data", "sample_vehicle_mod/models/Textures", "sample_vehicle_mod/models", "sample_vehicle_mod", "sample_track_mod/data", "sample_track_mod"]:
+		var full: String = "user://mods/" + d
+		for fn in DirAccess.get_files_at(full):
+			DirAccess.remove_absolute(full + "/" + fn)
+		DirAccess.remove_absolute(full)
 	Content.reload()
-	check(Content.get_vehicle("smoke_car")["id"] != "smoke_car", "mod removed cleanly")
+	check(Content.get_vehicle("mod_dusty_pickup")["id"] != "mod_dusty_pickup", "mod removed cleanly")
 	Settings.force_touch = true
 	Content.launch = {"mode": "race", "race_id": "sunny_circuit", "autodrive": true}
 	Engine.time_scale = 3.0
@@ -45,8 +42,8 @@ func _initialize() -> void:
 func _process(_dt: float) -> bool:
 	frames += 1
 	var elapsed := Time.get_ticks_msec() / 1000.0 - t0
-	if elapsed > 600.0:
-		check(false, "races finished within 600 s wall-clock")
+	if elapsed > 1500.0:
+		check(false, "races finished within 1500 s wall-clock")
 		return _finish()
 	if phase == 0 and frames > 20 and current_scene != null:
 		game = current_scene

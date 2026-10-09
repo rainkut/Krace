@@ -3,6 +3,16 @@
 Family-friendly 3D arcade racing in Godot 4.7 (GDScript, Mobile (Vulkan) renderer with High/Normal quality, mobile-first).
 Phase 1 = one complete, playable loop. No violence, no gambling, no ads, no network, no permissions.
 
+## Phases 3-6 (v0.7.0)
+* **Garage (Phase 3):** 14 cars; paint plus wheel caps, spoiler and decoration (stripe/flag/star), with live preview. Parts unlock by earning stars or finishing races (`data/parts.json`); ownership and your choices are saved per car.
+* **Mods (Phase 4):** data-only packs with a validated `mod.json` manifest, enable/disable, duplicate-id and range checks, clear errors, two sample mods. No code is ever loaded. See `MODDING.md`.
+* **Accessibility and parent area (Phase 5):** larger text, reduced motion, simple steering, camera-follow slider, difficulty, auto-accelerate, volume. Parents area (maths gate): mods, safe mode, save backup/restore, reset settings, erase progress. Corrupt save/settings are moved aside and recovered; a crash with mods installed starts in safe mode; Android Back pauses a race and Restart/Main Menu need two taps. No online features, ads, tracking or purchases.
+* **Release docs (Phase 6):** `CONTROLS.md`, `MODDING.md`, `docs/QA.md` (repeatable checklist, device-only tests, save backup/restore), `tools/mod_test.gd`.
+
+## Phase 3d: Realism pass 2 (v0.6.0)
+- Compound walls, hedges and gate gaps along lanes (`scripts/compounds.gd`, with collision), dry-scrub/soil patches behind them instead of bare sand, three procedural neem tree variants, irregular worn-tar patches (no rectangles), and a drifting cloud dome over the HDR sky.
+- UNVERIFIED: on-device frame rate (S24 Ultra).
+
 ## Phase 3c: Indian small-town realism pass (v0.5.0)
 - Real lane widths (main road 8 m, lanes 4-5 m), no lane markings on lanes, faded broken centre line + concrete kerb on the main road only, sandy dust shoulders, patched/worn asphalt, speed breakers.
 - Facade shader rebuilt: sun-faded wash, stained plaster, rain streaks, damp base, balconies with railings, jaali windows, AC units, hand-painted shop signboards, rolling shutters, some under-construction top floors.
@@ -98,6 +108,7 @@ export_presets.cfg   Android (arm64, debug keystore, landscape, no permissions, 
 ## Run / build
 ```
 godot --path .                                   # run (4.7.x)
+godot --headless -s tools/mod_test.gd            # mods + recovery tests, no GPU needed
 godot --headless -s tools/smoke_test.gd          # needs a renderer (use xvfb on a server)
 godot --headless --export-debug Android build/LittleRacerWorld-debug.apk
 ```
@@ -119,6 +130,9 @@ Mobile-renderer look on Adreno GPUs. AI opponents were only observed under softw
 driver (rather than scripted input) is untested.
 
 ## Known issues / limits
+- The Android external mods folder (`.../Android/data/<package>/files/mods`) and the Back-button handling are untested on a real phone; mods can always be installed from inside the app via Parents -> Install sample mods (app-private folder).
+- Mod vehicles must be `.glb` with textures shipped alongside; mods cannot add new world maps beyond simple grid towns.
+- Sound is the existing synthesised set; no new music this release.
 - Results are shown the moment the player finishes; opponents still racing show "DNF".
 - Mobile renderer: no SSAO/SSR/SDFGI (not available on Mobile); sky reflections only; "GTA-like" photorealism is not reachable on a phone with free assets. It is a stylised-realistic look.
 - Building heights are guessed; ramps lift the car but the body cannot pitch (angular X/Z locked), so jumps are arcade-style.

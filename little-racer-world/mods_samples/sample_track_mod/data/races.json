@@ -1,0 +1,18 @@
+{
+ "races": [
+  {
+   "id": "mod_sunny_sprint",
+   "name": "Sunny Sprint (mod)",
+   "description": "A short dash across Sunnyvale. Sample track mod.",
+   "town": "sunnyvale",
+   "laps": 1,
+   "route": [[6, 21], [21, 21], [21, 11], [11, 11]],
+   "gate_every": 8,
+   "opponents": [
+    {"name": "Zippy", "vehicle": "zippy_taxi", "paint": 2, "skill": 0.85, "lane": -2.0},
+    {"name": "Daisy", "vehicle": "sunny_hatch", "paint": 8, "skill": 0.8, "lane": 2.0}
+   ],
+   "rewards": {"1": 8, "2": 4, "3": 2}
+  }
+ ]
+}

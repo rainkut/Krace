@@ -24,19 +24,89 @@ void fragment() {
 static var _shader: Shader
 
 ## Returns a Node3D whose origin is the body centre; wheels touch y = -half_height.
-static func build(def: Dictionary, paint_index: int, half_height: float = 0.6) -> Node3D:
+static func build(def: Dictionary, paint_index: int, half_height: float = 0.6, parts: Dictionary = {}) -> Node3D:
 	var root := Node3D.new()
 	if str(def.get("procedural", "")) == "open_wheel":
 		_open_wheel(root, Content.paint_color(paint_index), half_height)
 		return root
 	var model := Content.load_model(Content.resolve_path(def["model"], def.get("_root", "res://")))
+	if model.find_children("*", "MeshInstance3D", true, false).is_empty():
+		model = Content.load_model("res://assets/kenney/cars/hatchback-sports.glb")
 	var s := float(def.get("model_scale", 1.75))
 	model.scale = Vector3.ONE * s
 	model.rotation.y = deg_to_rad(float(def.get("model_yaw", 180)))
 	model.position.y = -half_height + 0.3 * s
 	root.add_child(model)
 	paint(model, Content.paint_color(paint_index))
+	if not parts.is_empty():
+		_decorate(root, model, parts, Content.paint_color(paint_index))
 	return root
+
+## Bounds of the model in the parent's space.
+static func _bounds(model: Node3D) -> AABB:
+	var out := AABB()
+	var first := true
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		var xf := Transform3D.IDENTITY
+		var n: Node = m
+		while n != model:
+			xf = (n as Node3D).transform * xf
+			n = n.get_parent()
+		var bb: AABB = xf * m.get_aabb()
+		out = bb if first else out.merge(bb)
+		first = false
+	return model.transform * out
+
+## Decorative extras (wheel caps, spoiler, stripe/flag/decal) sized from the model's bounds.
+## Purely cosmetic: no effect on handling or collision.
+static func _decorate(root: Node3D, model: Node3D, parts: Dictionary, paint: Color) -> void:
+	var b := _bounds(model)
+	var hx := b.size.x * 0.5
+	var len := b.size.z
+	var top := b.end.y
+	var ground := b.position.y
+	var cx := b.get_center().x
+	var cz := b.get_center().z
+	var wheel_def := Content.get_part("wheels", str(parts.get("wheels", "stock")))
+	if str(wheel_def.get("color", "")) != "":
+		var wr := b.size.y * 0.2
+		var cap := _mat(Color(wheel_def["color"]), 0.25, 0.7)
+		for sx in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				var c := CylinderMesh.new()
+				c.top_radius = wr * 0.62
+				c.bottom_radius = wr * 0.62
+				c.height = 0.06
+				c.radial_segments = 16
+				_part(root, c, cap, Vector3(cx + sx * (hx + 0.005), ground + wr, cz + sz * len * 0.31), Vector3(0, 0, PI * 0.5))
+	var sp := str(parts.get("spoilers", "none"))
+	if sp != "none" and Content.get_part("spoilers", sp).size() > 0:
+		var dark := _mat(Color("202226"), 0.6)
+		var col := _mat(paint, 0.4, 0.2)
+		var zb := cz + len * 0.5 - 0.12
+		var h: float = {"lip": 0.0, "wing": 0.22, "tall": 0.42}.get(sp, 0.2)
+		var yb := top - b.size.y * 0.18
+		_bx(root, Vector3(b.size.x * 0.92, 0.05, 0.3), col, Vector3(cx, yb + h, zb))
+		if h > 0.0:
+			for sx in [-1.0, 1.0]:
+				_bx(root, Vector3(0.05, h, 0.06), dark, Vector3(cx + sx * hx * 0.55, yb + h * 0.5, zb))
+	var ex := str(parts.get("extras", "none"))
+	if ex == "stripe":
+		var wh := _mat(Color("f4f4f0"), 0.5)
+		for sx in [-1.0, 1.0]:
+			_bx(root, Vector3(0.1, 0.012, len * 0.9), wh, Vector3(cx + sx * 0.14, top + 0.004, cz))
+	elif ex == "flag":
+		var pole := _mat(Color("c9ccd2"), 0.4, 0.6)
+		_bx(root, Vector3(0.025, 0.4, 0.025), pole, Vector3(cx + hx * 0.55, top + 0.2, cz))
+		_bx(root, Vector3(0.3, 0.18, 0.012), _mat(Color("ff8a1f"), 0.6), Vector3(cx + hx * 0.55 + 0.16, top + 0.32, cz))
+	elif ex == "star":
+		var st := CylinderMesh.new()
+		st.top_radius = 0.26
+		st.bottom_radius = 0.26
+		st.height = 0.012
+		st.radial_segments = 5
+		_part(root, st, _mat(Color("ffd21f"), 0.4), Vector3(cx, top + 0.006, cz))
 
 static func paint(model: Node, color: Color) -> void:
 	if _shader == null:

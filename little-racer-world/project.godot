@@ -3,6 +3,7 @@ config_version=5
 
 [application]
 config/name="Little Racer World"
+config/quit_on_go_back=false
 config/description="A family-friendly 3D open-world racing game for kids."
 run/main_scene="res://scenes/boot.tscn"
 config/features=PackedStringArray("4.7", "Mobile")

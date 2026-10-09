@@ -1,0 +1,8 @@
+{
+ "format": 1,
+ "id": "sample_track_mod",
+ "name": "Sample Sunny Sprint",
+ "version": "1.0.0",
+ "author": "Little Racer World",
+ "description": "Adds a short one-lap sprint race on the built-in Sunnyvale town."
+}

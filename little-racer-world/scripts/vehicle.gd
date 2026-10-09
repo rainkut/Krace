@@ -32,7 +32,7 @@ var _last_set_speed := 0.0
 var _vis_roll := 0.0
 var _vis_pitch := 0.0
 
-static func create(vehicle_def: Dictionary, paint_index: int) -> Vehicle:
+static func create(vehicle_def: Dictionary, paint_index: int, parts: Dictionary = {}) -> Vehicle:
 	var v := Vehicle.new()
 	v.def = vehicle_def
 	v.max_speed = float(vehicle_def.get("max_speed", 30))
@@ -60,7 +60,7 @@ static func create(vehicle_def: Dictionary, paint_index: int) -> Vehicle:
 	box.size = Vector3(1.5 * s * 0.88, v.half_height * 2.0, 2.55 * s * 0.95)
 	shape.shape = box
 	v.add_child(shape)
-	v.visual = CarVisual.build(vehicle_def, paint_index, v.half_height)
+	v.visual = CarVisual.build(vehicle_def, paint_index, v.half_height, parts)
 	v.add_child(v.visual)
 	return v
 
@@ -136,7 +136,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 func _process(dt: float) -> void:
 	if visual == null:
 		return
-	var target_roll := clampf(-steer * absf(speed) * 0.0035, -0.07, 0.07)
+	var target_roll := 0.0 if Settings.reduced_motion else clampf(-steer * absf(speed) * 0.0035, -0.07, 0.07)
 	var target_pitch := clampf((throttle - brake) * 0.025, -0.04, 0.04)
 	_vis_roll = lerpf(_vis_roll, target_roll, 1.0 - exp(-8.0 * dt))
 	_vis_pitch = lerpf(_vis_pitch, target_pitch, 1.0 - exp(-6.0 * dt))

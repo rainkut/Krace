@@ -1,0 +1,18 @@
+{
+ "vehicles": [
+  {
+   "id": "mod_dusty_pickup",
+   "name": "Dusty Pickup",
+   "model": "models/pickup.glb",
+   "model_scale": 1.75,
+   "model_yaw": 180,
+   "max_speed": 31,
+   "accel": 13,
+   "handling": 1.1,
+   "grip": 10,
+   "unlock_stars": 0,
+   "default_paint": 1,
+   "blurb": "A sample mod car. Tough, steady and easy to steer."
+  }
+ ]
+}
