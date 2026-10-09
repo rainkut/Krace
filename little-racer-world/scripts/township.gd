@@ -253,7 +253,7 @@ func _ground_and_roads() -> void:
 		g.set_normal(Vector3.UP)
 		g.set_uv(pts[k] / 6.0)
 		g.add_vertex(Vector3(pts[k].x, 0.045, pts[k].y))
-	_surf(g, w._pbr("ground037", 6.0, Color("d3bf93")))
+	_surf(g, w._itex("ground054", 6.0, Color("d3bf93"), 0.6))
 	var asphalt := SurfaceTool.new(); asphalt.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for r in d["roads"]:
 		if r["kind"] == "forecourt":
@@ -264,12 +264,12 @@ func _ground_and_roads() -> void:
 		if r.get("closed", false) and pv.size() > 1 and pv[0] != pv[pv.size() - 1]:
 			pv.append(pv[0])
 		w._ribbon(asphalt, pv, float(r["w"]), 0.10, 1.0 / 5.0)
-	_surf(asphalt, w._pbr("asphalt031", 5.0, Color("b9b6b0")))
+	_surf(asphalt, w._itex("asphalt025b", 4.0, Color("a9a399"), 1.0))
 
 func _forecourt() -> void:
 	var fc: Dictionary = d["forecourt"]
 	var img := Image.create(192, 192, false, Image.FORMAT_RGB8)
-	var bands := [Color("c9919a"), Color("84363f"), Color("d6c6a2")]
+	var bands := [Color("b98a80"), Color("7a4a46"), Color("cdbf9f")]
 	for y in 192:
 		for x in 192:
 			var band := int(((x + y) % 192) / 64) % 3
@@ -285,7 +285,8 @@ func _forecourt() -> void:
 	var tex := ImageTexture.create_from_image(img)
 	var m := StandardMaterial3D.new()
 	m.albedo_texture = tex
-	m.roughness = 0.85
+	m.albedo_color = Color(0.93, 0.88, 0.80)
+	m.roughness = 0.9
 	m.uv1_scale = Vector3.ONE / 3.0
 	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES)

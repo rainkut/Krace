@@ -4,8 +4,8 @@ extends RefCounted
 
 ## [sun pitch, sun yaw, sun energy, sun colour, fog colour, fog density, ambient energy, sky energy]
 const TOD := [
-	[-22.0, -95.0, 1.0, "ffd9b0", "e8d4b8", 0.0030, 0.70, 0.90],
-	[-38.0, -52.0, 1.25, "ffe9c8", "d9d2c0", 0.0021, 0.80, 1.0],
+	[-22.0, -95.0, 1.0, "ffd9b0", "e6cfa8", 0.0034, 0.70, 0.90],
+	[-38.0, -52.0, 1.25, "ffe9c8", "dccfb0", 0.0026, 0.80, 1.0],
 	[-14.0, -70.0, 1.1, "ff9a4d", "e8b88a", 0.0026, 0.60, 0.78],
 	[-5.0, -60.0, 0.45, "ff6a3a", "9a86a0", 0.0030, 0.45, 0.50],
 ]
@@ -47,7 +47,7 @@ static func add_to(parent: Node, shadows: bool, shadow_dist := 140.0) -> void:
 	if high:
 		env.fog_aerial_perspective = 0.35
 		env.fog_sun_scatter = 0.25
-	env.fog_sky_affect = 0.35
+	env.fog_sky_affect = 0.42
 	env.adjustment_enabled = true
 	env.adjustment_contrast = 1.08
 	env.adjustment_saturation = 1.12

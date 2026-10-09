@@ -6,7 +6,10 @@ extends Town
 
 const SEG_CELL := 32.0
 const FACADE_SHADER := preload("res://scripts/facade.gdshader")
-const TREE_MODELS := ["tree_oak", "tree_default", "tree_simple", "tree_fat", "tree_pineTallA", "tree_pineRoundA", "tree_small", "tree_detailed"]
+const TREE_MODELS := ["tree_oak", "tree_default", "tree_simple", "tree_fat", "tree_small", "tree_detailed", "tree_oak", "tree_small"]
+const TEX := "res://assets/textures/indian/"
+## Real Sheoganj lanes are narrow: OSM class -> carriageway width in metres.
+const REAL_WIDTH := {"secondary": 8.0, "tertiary": 6.5, "unclassified": 5.2, "residential": 4.0, "service": 3.2, "track": 3.2, "living_street": 3.5}
 
 var world: Dictionary
 var gen: Dictionary
@@ -77,6 +80,7 @@ func build(town_data: Dictionary, _reserved: Dictionary = {}) -> void:
 	_world_buildings()
 	_world_trees()
 	_world_poles()
+	StreetClutter.build(self, road_polylines, _rng, _col_body, Settings.quality_level() == 2, func(p): return township != null and township.inside(p, 14.0))
 	_world_landmarks()
 	_world_park()
 	_make_stars()
@@ -95,6 +99,7 @@ func _exit_tree() -> void:
 func _index_roads() -> void:
 	for r in world["roads"]:
 		var pts: Array = r["p"]
+		r["w"] = float(REAL_WIDTH.get(str(r["c"]), float(r["w"]) * 0.75))
 		var hw := float(r["w"]) * 0.5
 		var pv := PackedVector2Array()
 		for p in pts:
@@ -256,6 +261,18 @@ func _pbr(name: String, tile_m: float, tint := Color.WHITE, normal_scale := 1.0)
 	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	return m
 
+func _itex(name: String, tile_m: float, tint := Color.WHITE, normal_scale := 0.8) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = load(TEX + name + "_color.jpg")
+	m.albedo_color = tint
+	m.normal_enabled = true
+	m.normal_texture = load(TEX + name + "_normal.jpg")
+	m.normal_scale = normal_scale
+	m.roughness_texture = load(TEX + name + "_rough.jpg")
+	m.uv1_scale = Vector3.ONE / tile_m
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	return m
+
 func _flat_mat(color: Color, rough := 0.85) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color
@@ -272,7 +289,7 @@ func _world_ground() -> void:
 	var mi := MeshInstance3D.new()
 	mi.position = Vector3(bc.x, 0.0, bc.y)
 	mi.mesh = plane
-	mi.material_override = _pbr("ground037", 7.0, Color("d8c9a8"))
+	mi.material_override = _itex("ground054", 8.0, Color("e0cfa6"), 0.6)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	var floor_shape := CollisionShape3D.new()
@@ -323,9 +340,9 @@ func _world_areas() -> void:
 			"scrub": _fill_polygon(scrub, poly, 0.035, 1.0 / 7.0)
 			"residential": _fill_polygon(town, poly, 0.025, 1.0 / 6.0)
 			"water": _fill_polygon(wat, poly, 0.03, 0.05)
-	_surface(farm, _pbr("grass004", 6.0, Color("a8b070")), false)
-	_surface(scrub, _pbr("ground037", 7.0, Color("a89a6c")), false)
-	_surface(town, _pbr("ground037", 6.0, Color("c9b997")), false)
+	_surface(farm, _itex("ground054", 7.0, Color("c2ad78"), 0.6), false)
+	_surface(scrub, _itex("ground033", 7.0, Color("b49f72"), 0.6), false)
+	_surface(town, _itex("ground054", 6.0, Color("d6c39b"), 0.6), false)
 	var wm := _flat_mat(Color("4b7f8a"), 0.12)
 	wm.metallic = 0.25
 	wm.metallic_specular = 0.8
@@ -401,10 +418,11 @@ func _junction_points() -> PackedVector2Array:
 
 func _world_roads() -> void:
 	var asphalt := SurfaceTool.new(); asphalt.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var verge := SurfaceTool.new(); verge.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var shoulder := SurfaceTool.new(); shoulder.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var kerb := SurfaceTool.new(); kerb.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var dirt := SurfaceTool.new(); dirt.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var paint := SurfaceTool.new(); paint.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var yellow := SurfaceTool.new(); yellow.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var patches := SurfaceTool.new(); patches.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var junctions := _junction_points()
 	for rp in road_polylines:
 		var pts: PackedVector2Array = rp["pts"]
@@ -413,22 +431,43 @@ func _world_roads() -> void:
 		if c == "track":
 			_ribbon(dirt, pts, w, 0.09, 1.0 / 5.0)
 			continue
-		_ribbon(verge, pts, w + 3.2, 0.06, 1.0 / 4.0, false)
+		# sandy, uneven shoulder instead of a kerb; worn-in dust spills over the tar edge
+		_ribbon(shoulder, pts, w + (4.0 if c == "secondary" else 2.6), 0.06, 1.0 / 4.0, false)
 		_ribbon(asphalt, pts, w, 0.10, 1.0 / 5.0)
-		if c == "secondary" or c == "tertiary":
-			_dashes(paint, pts, junctions, 0.0, 0.16, 3.0, 4.5)
-			if c == "secondary":
-				_dashes(paint, _offset(pts, w * 0.5 - 0.45), junctions, 0.0, 0.14, 1000.0, 0.0)
-				_dashes(paint, _offset(pts, -(w * 0.5 - 0.45)), junctions, 0.0, 0.14, 1000.0, 0.0)
-		elif c == "unclassified":
-			_dashes(paint, pts, junctions, 0.0, 0.12, 2.0, 5.0)
-	var tex_asphalt := _pbr("asphalt031", 5.0, Color("b9b6b0"))
-	_surface(asphalt, tex_asphalt, false)
-	_surface(verge, _pbr("concrete034", 4.0, Color("c9c2b4")), false)
-	_surface(dirt, _pbr("ground037", 5.0, Color("b49a72")), false)
-	var pm := _flat_mat(Color("eeeae0"), 0.7)
+		if c == "secondary":
+			# only the main road has a raised concrete kerb strip and a faded broken centre line
+			_ribbon(kerb, pts, w + 1.4, 0.085, 1.0 / 4.0, false)
+			_dashes(paint, pts, junctions, 0.0, 0.14, 2.2, 5.5)
+		_patch_road(patches, pts, w, 0.114 if c != "secondary" else 0.118)
+	_surface(asphalt, _itex("asphalt025b", 4.0, Color("a9a399"), 1.0), false)
+	_surface(shoulder, _itex("ground054", 4.0, Color("d9c79a"), 0.6), false)
+	_surface(kerb, _itex("concrete019", 4.0, Color("b9b2a2"), 0.6), false)
+	_surface(dirt, _itex("ground033", 5.0, Color("b49a72"), 0.7), false)
+	var pm := _flat_mat(Color("cfc8b0"), 0.9)
+	pm.albedo_color = Color("cfc8b0")
 	_surface(paint, pm, false)
+	_surface(patches, _itex("asphalt012", 3.0, Color("6a665f"), 0.8), false)
 	_speed_breakers()
+
+func _patch_road(st: SurfaceTool, pts: PackedVector2Array, w: float, y: float) -> void:
+	var next := _rng.randf_range(6.0, 30.0)
+	for i in pts.size() - 1:
+		var a := pts[i]
+		var b := pts[i + 1]
+		var L := a.distance_to(b)
+		if L < 0.5:
+			continue
+		var d := (b - a) / L
+		var n := Vector2(-d.y, d.x)
+		var t := next
+		while t < L:
+			var c0 := a + d * t + n * _rng.randf_range(-w * 0.3, w * 0.3)
+			var pw := _rng.randf_range(0.7, w * 0.45)
+			var pl := _rng.randf_range(1.2, 4.0)
+			_tri(st, c0 - d * pl * 0.5 + n * pw * 0.5, c0 + d * pl * 0.5 + n * pw * 0.5, c0 + d * pl * 0.5 - n * pw * 0.5, y, 1.0)
+			_tri(st, c0 - d * pl * 0.5 + n * pw * 0.5, c0 + d * pl * 0.5 - n * pw * 0.5, c0 - d * pl * 0.5 - n * pw * 0.5, y, 1.0)
+			t += _rng.randf_range(6.0, 30.0)
+		next = t - L
 
 func _offset(pts: PackedVector2Array, off: float) -> PackedVector2Array:
 	var out := PackedVector2Array()
@@ -504,6 +543,9 @@ func _world_buildings() -> void:
 		return
 	var mat := ShaderMaterial.new()
 	mat.shader = FACADE_SHADER
+	mat.set_shader_parameter("plaster_a", load(TEX + "plaster003_color.jpg"))
+	mat.set_shader_parameter("plaster_b", load(TEX + "plaster006_color.jpg"))
+	mat.set_shader_parameter("stone_t", load(TEX + "bricks075a_color.jpg"))
 	var box := BoxMesh.new()
 	box.size = Vector3.ONE
 	var chunks := {}
@@ -590,7 +632,7 @@ func _world_trees() -> void:
 		var kind: String = TREE_MODELS[int(t[3]) % TREE_MODELS.size()]
 		var p := Vector3(float(t[0]), 0.0, float(t[1]))
 		var sc := float(t[2])
-		by_kind[kind].append(Transform3D(Basis(Vector3.UP, fmod(float(t[0]) * 7.31, TAU)).scaled(Vector3.ONE * sc), p))
+		by_kind[kind].append(Transform3D(Basis(Vector3.UP, fmod(float(t[0]) * 7.31, TAU)).scaled(Vector3(1.35, 0.85, 1.35) * sc), p))
 		if int(t[4]) == 1:
 			var cs := CollisionShape3D.new()
 			cs.shape = shape
@@ -613,6 +655,13 @@ func _world_poles() -> void:
 		var pos := Vector3(float(p[0]), 3.75, float(p[1]))
 		pole_xf.append(Transform3D(Basis.IDENTITY, pos))
 		arm_xf.append(Transform3D(Basis(Vector3.UP, fmod(float(p[0]) * 3.7, PI)), Vector3(pos.x, 7.0, pos.z)))
+	var tf_xf: Array = []
+	var pi := 0
+	for p in gen.get("poles", []):
+		pi += 1
+		if pi % 9 == 0:
+			tf_xf.append(Transform3D(Basis(Vector3.UP, fmod(float(p[0]) * 3.7, PI)), Vector3(float(p[0]) + 0.35, 6.0, float(p[1]))))
+	_instances(BoxMesh.new(), tf_xf, _flat_mat(Color("5a5d5f"), 0.6), func(m): m.size = Vector3(0.7, 1.1, 0.7))
 	_instances(cyl, pole_xf, _flat_mat(Color("8d8a84"), 0.9), Callable())
 	_instances(arm, arm_xf, _flat_mat(Color("3a3a3a"), 0.7), Callable())
 	var lines := PackedVector3Array()

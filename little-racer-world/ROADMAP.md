@@ -1,6 +1,7 @@
 # Roadmap
 
 ## Done
+- Phase 3c: Indian small-town realism pass (real lane widths, weathered facades, street life, dusty look) (v0.5.0).
 - Phase 3b: real Overture building footprints (Sheoganj + Ashapurna surroundings), Mobile (Vulkan) renderer, High/Normal graphics + time-of-day settings (v0.4.0).
 - Phase 3a: Ashapurna Township (to-scale, anchored to real pin) + Ashapurna Grand Prix circuit race, Comet GP car (v0.3.0).
 - **Phase 1** — playable loop: one town, one race, 4 cars, touch controls, save, procedural sound.

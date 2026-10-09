@@ -3,6 +3,12 @@
 Family-friendly 3D arcade racing in Godot 4.7 (GDScript, Mobile (Vulkan) renderer with High/Normal quality, mobile-first).
 Phase 1 = one complete, playable loop. No violence, no gambling, no ads, no network, no permissions.
 
+## Phase 3c: Indian small-town realism pass (v0.5.0)
+- Real lane widths (main road 8 m, lanes 4-5 m), no lane markings on lanes, faded broken centre line + concrete kerb on the main road only, sandy dust shoulders, patched/worn asphalt, speed breakers.
+- Facade shader rebuilt: sun-faded wash, stained plaster, rain streaks, damp base, balconies with railings, jaali windows, AC units, hand-painted shop signboards, rolling shutters, some under-construction top floors.
+- Street life (primitives, no external models): two-wheelers, auto-rickshaws, tempos, handcarts, fruit stalls, water drums, cows and dogs (kid-safe, blocky); transformers on poles; flatter olive neem/babool-style trees; dry fields instead of lawns; dustier haze.
+- Textures added (all CC0, ambientCG, fetched by `tools/fetch_assets.py`): see `data/CREDITS-assets.md`.
+
 ## Phase 3b: Real building footprints + Mobile renderer (v0.4.0)
 
 - **Real buildings**: Sheoganj and the Ashapurna surroundings now use real footprints from Overture Maps (Google Open Buildings + Microsoft ML Buildings + OSM): 8,393 footprints fetched for the whole world, 6,255 kept after dropping <12 m2 slivers and de-duplicating, 6,571 oriented rectangles (L/U-shaped outlines are split into up to 3 rectangles), **5,455 placed** in the game (the rest sat on mapped roads or overlapped another). Pipeline: `tools/buildings_to_world.py` (cached result `data/buildings/footprints.json`, raw download kept as `overture_raw.geojson`) -> `tools/gen_world.py`. Each building turns its front (windows, door, shop shutters) towards the nearest road; party walls (neighbour within 1 m) get blank sides; shop-shutter strips only on buildings within ~12 m of the Bamnera-Sheoganj road (76 of them: real coverage there is thin). Floors (1-4) are a deterministic guess from footprint area and road class, **not real heights** (the datasets have none here); colours, water tanks and stair rooms are generated.
@@ -65,6 +71,17 @@ Map data © OpenStreetMap contributors, ODbL (https://www.openstreetmap.org/copy
 - Data-driven: cars, paints, races and towns are JSON; mods load from `user://mods/<name>/data/` (see MODDING.md)
 
 ## Assets and licences
+| Asset | Source | Licence | Used as |
+|---|---|---|---|
+| Plaster003 / Plaster006 / Bricks075A | ambientCG | CC0 | facade weathering, rooftops |
+| Asphalt025B / Asphalt012 | ambientCG | CC0 | worn road, patches |
+| Ground054 / Ground033 | ambientCG | CC0 | dust, dry fields, shoulders |
+| Concrete019 | ambientCG | CC0 | main-road kerb |
+| Earlier PBR set, sky HDRI | ambientCG / Poly Haven | CC0 | see `assets/pbr/LICENSE.txt` |
+| Car/nature/roads models | Kenney | CC0 | vehicles, trees |
+| Buildings / roads data | Overture (CC BY 4.0, ODbL), OpenStreetMap (ODbL) | attributed in-game | layout |
+No CC BY-SA / NC / all-rights-reserved image is shipped. Street props are built in code.
+
 Textures: ambientCG (CC0). Sky HDRI: Poly Haven "Kloofendal 48d" (CC0). See `assets/pbr/LICENSE.txt`.
 3D models: Kenney (kenney.nl) Car Kit, City Kit (Roads), City Kit (Suburban), Nature Kit — **CC0**. Licence files are
 next to the models in `assets/kenney/*/License.txt`. Everything else (code, icon, sounds, town layout) is original.

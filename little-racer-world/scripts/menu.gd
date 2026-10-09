@@ -348,7 +348,7 @@ func _page_settings() -> Control:
 		Settings.save_settings())
 	gfx_row.add_child(tdb)
 	v.add_child(gfx_row)
-	var credit := UI.label("Map: (c) OpenStreetMap contributors (ODbL); buildings: Overture Maps Foundation - Google Open Buildings (CC BY 4.0), Microsoft Building Footprints (ODbL). Textures/sky: ambientCG & Poly Haven (CC0). Car/props: Kenney (CC0). Graphics changes apply next race.", 18, Color("9fb4c8"))
+	var credit := UI.label("Map: (c) OpenStreetMap contributors (ODbL); buildings: Overture Maps Foundation - Google Open Buildings (CC BY 4.0), Microsoft Building Footprints (ODbL). Textures (plaster, asphalt, ground, concrete, brick): ambientCG (CC0); sky: Poly Haven (CC0). Car/props: Kenney (CC0). Graphics changes apply next race.", 18, Color("9fb4c8"))
 	credit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	credit.custom_minimum_size = Vector2(900, 0)
 	v.add_child(credit)

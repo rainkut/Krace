@@ -280,7 +280,7 @@ func _fix_materials(mesh: Mesh, nature: bool) -> void:
 		if nature:
 			var n := mat.resource_name.to_lower()
 			if n.contains("leaf") or n.contains("grass") or n.contains("bush"):
-				mat.albedo_color = Color("5e9f3a") if not n.contains("dark") else Color("3f7a2c")
+				mat.albedo_color = Color("7d8f45") if not n.contains("dark") else Color("5d6e34")
 			elif n.contains("wood") or n.contains("bark"):
 				mat.albedo_color = Color("7a5236")
 
