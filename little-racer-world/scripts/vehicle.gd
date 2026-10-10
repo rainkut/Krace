@@ -25,6 +25,7 @@ var road_query := Callable()
 var visual: Node3D
 var half_height := 0.6
 
+var speed_cap := 1.0      # Easy-drive: fraction of max_speed
 var _stopped_brake_t := 0.0
 var _teleport_pending := false
 var _teleport_xf := Transform3D.IDENTITY
@@ -97,20 +98,20 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	var vl := horiz.dot(right)
 	var th := 0.0 if frozen_control else throttle
 	var br := 1.0 if frozen_control else brake
-	var lim := max_speed * (1.0 if on_road else 0.62)
+	var lim := max_speed * speed_cap * (1.0 if on_road else 0.62)
 	if th > 0.0:
 		if vf < lim:
 			vf += accel * th * (1.0 - clampf(vf / lim, 0.0, 1.0) * 0.72) * dt
 		else:
 			vf = move_toward(vf, lim, 18.0 * dt)
 	if br > 0.0:
-		if vf > 0.5:
+		if vf > 1.5:
 			vf = maxf(0.0, vf - 34.0 * br * dt)
 			_stopped_brake_t = 0.0
 		else:
 			_stopped_brake_t += dt
-			if not frozen_control and (reverse_now or _stopped_brake_t > 0.7):
-				vf = maxf(-max_speed * 0.3, vf - accel * 0.55 * br * dt)
+			if not frozen_control and (reverse_now or _stopped_brake_t > 0.12):
+				vf = maxf(-max_speed * 0.4, vf - accel * 0.9 * br * dt)
 			else:
 				vf = move_toward(vf, 0.0, 20.0 * dt)
 	else:

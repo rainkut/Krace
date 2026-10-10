@@ -185,10 +185,10 @@ static func build(parent: Node3D, roads: Array, rng: RandomNumberGenerator, col_
 						off = w * 0.5 + 1.0
 				elif r < 0.44:
 					kind = "rick"
-					off = w * 0.5 + 1.3
+					off = w * 0.5 + 2.2
 				elif r < 0.50:
 					kind = "tempo"
-					off = w * 0.5 + 1.6
+					off = w * 0.5 + 2.9
 				elif r < 0.60:
 					kind = "cart"
 					off = w * 0.5 + 1.1
@@ -197,7 +197,7 @@ static func build(parent: Node3D, roads: Array, rng: RandomNumberGenerator, col_
 					off = w * 0.5 + 2.0
 				elif r < 0.76:
 					kind = "cow"
-					off = w * 0.5 - rng.randf_range(0.0, 0.6) if rng.randf() < 0.4 else w * 0.5 + 1.0
+					off = w * 0.5 + rng.randf_range(1.7, 2.3)
 					yaw = yaw_road + rng.randf_range(-0.6, 0.6) + (PI if rng.randf() < 0.5 else 0.0)
 				elif r < 0.82:
 					kind = "dog"
@@ -218,7 +218,7 @@ static func build(parent: Node3D, roads: Array, rng: RandomNumberGenerator, col_
 						var xf := Transform3D(Basis(Vector3.UP, yaw), Vector3(p2.x, 0.12, p2.y))
 						meshes[kind][vi].append(xf)
 						if kind == "cow" or kind == "rick" or kind == "tempo":
-							var sz := Vector3(1.0, 1.4, 1.8) if kind == "cow" else (Vector3(1.4, 1.8, 2.6) if kind == "rick" else Vector3(1.7, 2.2, 4.2))
+							var sz := Vector3(0.8, 1.4, 1.5) if kind == "cow" else (Vector3(1.2, 1.8, 2.2) if kind == "rick" else Vector3(1.5, 2.2, 3.6))
 							var cs := CollisionShape3D.new()
 							var bs := BoxShape3D.new()
 							bs.size = sz

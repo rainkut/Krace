@@ -341,7 +341,7 @@ func _circuit_furniture() -> void:
 		i += 1
 		var cs := CollisionShape3D.new()
 		var sh := CylinderShape3D.new()
-		sh.radius = 0.55
+		sh.radius = 0.38
 		sh.height = 1.0
 		cs.shape = sh
 		cs.position = base

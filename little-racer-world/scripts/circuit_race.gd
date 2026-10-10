@@ -140,13 +140,15 @@ func _track(r: Dictionary) -> void:
 	var cur: int = r["cur"]
 	var best_k := 0
 	var bd := 1e18
-	for k in range(-2, 14):
+	for k in range(-3, 50):
 		var q := pts[widx(cur + k)]
 		var d := Vector2(q.x - p.x, q.z - p.z).length_squared()
+		if k > 14:
+			d += float((k - 14) * (k - 14)) * 25.0
 		if d < bd:
 			bd = d
 			best_k = k
-	if bd > 28.0 * 28.0:
+	if bd > 45.0 * 45.0:
 		return
 	cur += best_k
 	r["cur"] = cur

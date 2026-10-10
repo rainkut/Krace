@@ -18,6 +18,8 @@ var obstacles := 1  # street clutter: 0 off, 1 few, 2 normal
 var large_text := false
 var reduced_motion := false
 var simple_steering := false
+var easy_drive := true          # steering assist + speed cap in races
+var minimap_north := false      # false = heading-up
 var cam_sensitivity := 1.0
 var quality := 0  # 0 auto, 1 normal, 2 high
 var time_of_day := 1  # 0 morning, 1 noon, 2 evening, 3 dusk
@@ -73,6 +75,7 @@ func reset_to_defaults() -> void:
 	var keep_mods := disabled_mods
 	sfx_volume = 0.8; auto_accelerate = true; tilt_steering = false; tilt_invert = false; tilt_sensitivity = 1.0
 	shadows = true; use_mph = false; difficulty = 1; force_touch = false; traffic = 2; obstacles = 1; quality = 0; time_of_day = 1
+	easy_drive = true; minimap_north = false
 	disabled_mods = keep_mods
 	save_settings()
 	apply()
@@ -135,6 +138,8 @@ func load_settings() -> void:
 	large_text = bool(cf.get_value("access", "large_text", large_text))
 	reduced_motion = bool(cf.get_value("access", "reduced_motion", reduced_motion))
 	simple_steering = bool(cf.get_value("access", "simple_steering", simple_steering))
+	easy_drive = bool(cf.get_value("access", "easy_drive", easy_drive))
+	minimap_north = bool(cf.get_value("access", "minimap_north", minimap_north))
 	cam_sensitivity = clampf(float(cf.get_value("access", "cam_sensitivity", cam_sensitivity)), 0.5, 1.6)
 	var dm = cf.get_value("mods", "disabled", [])
 	disabled_mods = Array(dm) if dm is Array else []
@@ -158,6 +163,8 @@ func save_settings() -> void:
 	cf.set_value("access", "large_text", large_text)
 	cf.set_value("access", "reduced_motion", reduced_motion)
 	cf.set_value("access", "simple_steering", simple_steering)
+	cf.set_value("access", "easy_drive", easy_drive)
+	cf.set_value("access", "minimap_north", minimap_north)
 	cf.set_value("access", "cam_sensitivity", cam_sensitivity)
 	cf.set_value("mods", "disabled", disabled_mods)
 	cf.set_value("mods", "safe_mode", mods_safe_mode)

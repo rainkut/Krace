@@ -633,8 +633,8 @@ func _world_trees() -> void:
 	for t in TREE_MODELS:
 		by_kind[t] = []
 	var shape := CylinderShape3D.new()
-	shape.radius = 0.7
-	shape.height = 6.0
+	shape.radius = 0.42
+	shape.height = 4.0
 	var high := Settings.quality_level() == 2
 	for t in gen.get("trees", []):
 		if t.size() > 5 and not high:
@@ -646,7 +646,7 @@ func _world_trees() -> void:
 		if int(t[4]) == 1:
 			var cs := CollisionShape3D.new()
 			cs.shape = shape
-			cs.position = Vector3(p.x, 3.0, p.z)
+			cs.position = Vector3(p.x, 2.0, p.z)
 			_col_body.add_child(cs)
 	var tmeshes := Compounds.tree_meshes()
 	for v in tmeshes.size():

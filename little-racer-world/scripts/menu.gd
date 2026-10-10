@@ -349,6 +349,7 @@ func _page_settings() -> Control:
 		ui_root.theme = UI.make_theme()
 		_build_pages_for_text()))
 	grid.add_child(_toggle("Reduced motion", Settings.reduced_motion, func(on): Settings.reduced_motion = on))
+	grid.add_child(_toggle("Easy driving (steering assist, speed limit)", Settings.easy_drive, func(on): Settings.easy_drive = on))
 	grid.add_child(_toggle("Simple steering", Settings.simple_steering, func(on): Settings.simple_steering = on))
 	v.add_child(grid)
 	var cs_row := HBoxContainer.new()

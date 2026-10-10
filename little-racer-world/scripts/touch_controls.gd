@@ -29,6 +29,7 @@ func _ready() -> void:
 	_add("steer_right", ">")
 	_add("accelerate", "GO")
 	_add("brake", "BRAKE")
+	_add("reverse", "REVERSE")
 	_add("handbrake", "DRIFT")
 	_add("reset_car", "RESET")
 	_add("interact", "HONK")
@@ -62,6 +63,7 @@ func layout() -> void:
 	_place("accelerate", gas, not Settings.auto_accelerate)
 	_place("brake", Rect2(gas.position.x - 24 - 170, s.y - m - 170, 170, 170) if not Settings.auto_accelerate else Rect2(s.x - m - 230, s.y - m - 230, 230, 230))
 	_place("handbrake", Rect2(s.x - m - 150, gas.position.y - 20 - 150, 150, 150) if not Settings.auto_accelerate else Rect2(s.x - m - 230 - 24 - 150, s.y - m - 150, 150, 150))
+	_place("reverse", Rect2(gas.position.x - 24 - 170, s.y - m - 170 - 16 - 120, 170, 120) if not Settings.auto_accelerate else Rect2(s.x - m - 230 - 24 - 150, s.y - m - 150 - 16 - 120, 150, 120))
 	_place("reset_car", Rect2(s.x - m - 110, s.y * 0.30, 110, 110))
 	_place("interact", Rect2(s.x - m - 110 - 130, s.y * 0.30, 110, 110))
 	for b in buttons.values():

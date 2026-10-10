@@ -91,7 +91,8 @@ static func build(world: Node3D, polylines: Array, rng: RandomNumberGenerator, c
 							col = col.darkened(0.12)
 					var p := a + d * (t - 2.0) + n * off
 					var okp: bool = skip.is_null() or not skip.call(p)
-					okp = okp and float(world.nearest_road(p, 2)["edge"]) > 1.0 and not bi.near(p, 5.0)
+					okp = okp and float(world.nearest_road(p, 2)["edge"]) > 1.8 and not bi.near(p, 5.0)
+					okp = okp and float(world.nearest_road(p + d * 2.2, 2)["edge"]) > 1.8 and float(world.nearest_road(p - d * 2.2, 2)["edge"]) > 1.8
 					# gate gap near the end of a run
 					if run_left <= 2 and run_left >= 0 and style != 0:
 						okp = false
@@ -105,10 +106,10 @@ static func build(world: Node3D, polylines: Array, rng: RandomNumberGenerator, c
 					if style == 1:
 						walls.append([Transform3D(Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(4.1, h, 0.22)), Vector3(p.x, h * 0.5, p.y)), col])
 						caps.append(Transform3D(Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(4.15, 0.1, 0.38)), Vector3(p.x, h + 0.05, p.y)))
-						shapes.append([Vector3(p.x, h * 0.5, p.y), yaw, Vector3(4.1, h, 0.3)])
+						shapes.append([Vector3(p.x, h * 0.5, p.y), yaw, Vector3(4.1, h, 0.22)])
 					else:
 						hedges.append(Transform3D(Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(4.2, 1.0, 1.0)), Vector3(p.x, 0.55, p.y)))
-						shapes.append([Vector3(p.x, 0.55, p.y), yaw, Vector3(4.2, 1.1, 0.9)])
+						shapes.append([Vector3(p.x, 0.55, p.y), yaw, Vector3(4.2, 1.1, 0.6)])
 					if rng.randf() < 0.5:
 						var q2 := p + n * rng.randf_range(3.0, 14.0) + d * rng.randf_range(-3.0, 3.0)
 						if float(world.nearest_road(q2, 2)["edge"]) > 2.0 and not bi.near(q2, 2.0):

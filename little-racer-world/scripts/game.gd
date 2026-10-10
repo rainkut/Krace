@@ -40,6 +40,12 @@ var osm: OsmWorld
 var traffic: TrafficManager
 var minimap: MapView
 var circuit: CircuitRace
+var chevrons: Array = []
+var _stuck_t := 0.0
+var _back_t := 0.0
+var _back_steer := 0.0
+var _stuck_count := 0
+var _stuck_win := 0.0
 var _off_t := 0.0
 var _recover_cd := 0.0
 
@@ -332,7 +338,7 @@ func _attach_ai(r: Dictionary, skill: float, lane: float) -> void:
 	add_child(d)
 
 func _build_markers() -> void:
-	if mode != "race" or circuit != null:
+	if mode != "race":
 		return
 	gate = Node3D.new()
 	var ring := MeshInstance3D.new()
@@ -383,6 +389,10 @@ func _build_markers() -> void:
 	cone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	arrow.add_child(cone)
 	add_child(arrow)
+	if circuit != null:
+		gate.visible = false
+		_build_chevrons()
+		return
 	_place_gate()
 
 func _build_stars() -> void:
@@ -486,6 +496,7 @@ func _physics_process(dt: float) -> void:
 		_check_recovery(dt)
 	if circuit != null and state != "countdown":
 		circuit.physics(dt)
+		_update_circuit_guide(dt)
 		hud.set_place(_place_of(_player_racer), racers.size())
 	elif mode == "race" and state != "countdown":
 		for r in racers:
@@ -503,8 +514,14 @@ func _drive_player(dt: float) -> void:
 	var br := Input.get_action_strength("brake")
 	var th := Input.get_action_strength("accelerate")
 	var touch_on := Settings.touch_enabled()
+	var rev := Input.is_action_pressed("reverse")
+	if rev:
+		br = 1.0
 	if touch_on and Settings.auto_accelerate:
 		th = 1.0 if br < 0.1 else 0.0
+	if rev:
+		th = 0.0
+	player.reverse_now = rev
 	var target := Input.get_axis("steer_left", "steer_right")
 	if touch_on and Settings.tilt_steering:
 		var a := Input.get_accelerometer()
@@ -514,11 +531,108 @@ func _drive_player(dt: float) -> void:
 		target = clampf(tilt * 1.5, -1.0, 1.0) if absf(tilt) > 0.05 else 0.0
 	if Settings.simple_steering:
 		target *= 0.6 if absf(player.linear_velocity.length()) > 18.0 else 0.8
+	var gang := _guide_angle()
+	if Settings.easy_drive and not is_nan(gang) and th > 0.0 and player.speed > 2.0:
+		var w := (1.0 - clampf(absf(target) * 1.5, 0.0, 1.0)) * 0.55
+		target = clampf(target + clampf(gang * 1.6, -1.0, 1.0) * w, -1.0, 1.0)
+	player.speed_cap = _easy_cap() if Settings.easy_drive else 1.0
+	if state != "countdown" and not player.frozen_control:
+		if _back_t > 0.0:
+			_back_t -= dt
+			th = 0.0
+			br = 1.0
+			player.reverse_now = true
+			target = _back_steer
+		else:
+			if th > 0.3 and absf(player.speed) < 1.0 and player.linear_velocity.length() < 1.5:
+				_stuck_t += dt
+			else:
+				_stuck_t = maxf(0.0, _stuck_t - dt * 2.0)
+			if _stuck_t > 1.6:
+				_stuck_t = 0.0
+				_stuck_count += 1
+				_stuck_win = 9.0
+				if _stuck_count >= 3:
+					_stuck_count = 0
+					_reset_player()
+					hud.show_message("Back on track!", 1.4, Color("8fe3ff"))
+				else:
+					_back_t = 1.1
+					_back_steer = clampf(-gang * 2.0, -1.0, 1.0) if not is_nan(gang) else (1.0 if _stuck_count % 2 == 0 else -1.0)
+					hud.show_message("Backing up...", 1.0, Color("8fe3ff"))
+		_stuck_win -= dt
+		if _stuck_win <= 0.0:
+			_stuck_count = 0
 	var rate := (3.5 if Settings.simple_steering else 6.5) if absf(target) > absf(player.steer) else 10.0
 	player.steer = move_toward(player.steer, target, rate * dt)
 	player.throttle = th
 	player.brake = br
 	player.handbrake = Input.is_action_pressed("handbrake")
+
+func _guide_angle() -> float:
+	if mode != "race" or _player_racer.is_empty() or route.is_empty():
+		return NAN
+	var tgt: Vector3
+	if circuit != null:
+		var ahead := 3 + int(maxf(player.speed, 0.0) * 0.35 / 3.5)
+		tgt = circuit.aim(int(_player_racer["ci"]), ahead, 0.0, 0.0)
+	else:
+		tgt = route[int(_player_racer["count"]) % route.size()]
+	var l := player.global_transform.affine_inverse() * tgt
+	return atan2(l.x, -l.z)
+
+func _easy_cap() -> float:
+	var cap := 0.85
+	if circuit != null and not _player_racer.is_empty():
+		var la := circuit.widx(int(_player_racer["ci"]) + 4 + int(maxf(player.speed, 0.0) * 0.12 / 3.5))
+		cap = clampf(circuit.prof[la] * 1.25 / maxf(player.max_speed, 1.0), 0.4, 0.85)
+	return cap
+
+func _build_chevrons() -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var A := Vector3(0, 0, -1.5)
+	var B := Vector3(-1.5, 0, 1.0)
+	var C := Vector3(0, 0, 0.1)
+	var D := Vector3(1.5, 0, 1.0)
+	for v in [A, C, B, A, D, C]:
+		st.set_normal(Vector3.UP)
+		st.add_vertex(v)
+	var mesh := st.commit()
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color("2fe6ff")
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color.a = 0.85
+	for i in 12:
+		var mi := MeshInstance3D.new()
+		mi.mesh = mesh
+		mi.material_override = m
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+		chevrons.append(mi)
+
+func _update_circuit_guide(dt: float) -> void:
+	var live := state != "finished"
+	var ci := int(_player_racer["ci"])
+	for k in chevrons.size():
+		var mi: MeshInstance3D = chevrons[k]
+		mi.visible = live
+		var j := circuit.widx(ci + 3 + k * 4)
+		var d := circuit.dir[j]
+		mi.position = circuit.pts[j] + Vector3(0, 0.2, 0)
+		mi.rotation.y = atan2(-d.x, -d.z)
+	if arrow == null:
+		return
+	arrow.visible = live
+	var pp := player.global_position
+	var dir := circuit.aim(ci, 10, 0.0, 0.0) - pp
+	dir.y = 0.0
+	if dir.length() < 1.0:
+		dir = -player.global_transform.basis.z
+	arrow.rotation.y = lerp_angle(arrow.rotation.y, atan2(-dir.x, -dir.z), 1.0 - exp(-10.0 * dt))
+	arrow.position = pp + Vector3(0, 3.8 + sin(Time.get_ticks_msec() * 0.006) * 0.25, 0)
 
 func _collect_stars() -> void:
 	var pp := player.global_position
