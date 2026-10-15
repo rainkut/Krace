@@ -1,0 +1,414 @@
+class_name Racer
+extends Node3D
+## One motorcycle + rider (player or AI): road-relative physics, damage, melee animation.
+
+signal event(kind: String, data: Dictionary)
+
+enum St { IDLE, RACING, OVERTAKING, DEFENDING, ATTACKING, AVOIDING_TRAFFIC, RECOVERING, CRASHED, FINISHING }
+const ST_NAMES := ["IDLE", "RACING", "OVERTAKING", "DEFENDING", "ATTACKING", "AVOIDING_TRAFFIC", "RECOVERING", "CRASHED", "FINISHING"]
+
+static var _mats: Dictionary = {}
+
+var rname := "Rider"
+var is_player := false
+var arch := "balanced"
+var color := Color.ORANGE
+var body_style := 0
+var stats: Dictionary = {}
+var spd_mult := 1.0
+var acc_mult := 1.0
+var dmg_mult_out := 1.0
+var aggr := 0.3
+var mass := 1.0
+
+var s := 0.0
+var x := 0.0
+var vx := 0.0
+var v := 0.0
+var steer_i := 0.0
+var roll := 0.0
+var state: int = St.IDLE
+var health := 100.0
+var max_health := 100.0
+var cond := 100.0
+var nitro := 50.0
+var nitro_on := false
+var atk_cd := 0.0
+var invuln := 0.0
+var crash_t := 0.0
+var recover_t := 0.0
+var weapon := "punch"
+var weapon_dur := 0
+var finished := false
+var finish_time := 0.0
+var eliminated := false
+var place := 1
+var grudge: Racer = null
+var on_dirt := false
+var scrape := false
+var inp := {"steer": 0.0, "throttle": 1.0, "brake": 0.0, "nitro": false, "atk": 0, "kick": false}
+var anim_t := 1.0
+var anim_side := 1
+var anim_kick := false
+var hit_flash := 0.0
+var bump_t := 0.0
+var score := 0.0
+
+var model: Node3D
+var wheel_f: Node3D
+var wheel_r: Node3D
+var torso: Node3D
+var arm_l: Node3D
+var arm_r: Node3D
+var leg_l: Node3D
+var leg_r: Node3D
+var rider: Node3D
+var head_mat: StandardMaterial3D
+var wpn_nodes: Array[Node3D] = []
+var rider_vel := Vector3.ZERO
+var tumble := 0.0
+var _spin := 0.0
+
+static func mat(c: Color, rough := 0.6, metal := 0.0) -> StandardMaterial3D:
+	var key := "%s_%s_%s" % [c.to_html(), rough, metal]
+	if not _mats.has(key):
+		var m := StandardMaterial3D.new()
+		m.albedo_color = c
+		m.roughness = rough
+		m.metallic = metal
+		_mats[key] = m
+	return _mats[key]
+
+func setup(info: Dictionary) -> void:
+	rname = info["name"]
+	is_player = info.get("player", false)
+	arch = info.get("arch", "balanced")
+	color = info["color"]
+	body_style = info.get("body", 0)
+	stats = info["stats"]
+	spd_mult = info.get("spd", 1.0)
+	acc_mult = info.get("acc", 1.0)
+	dmg_mult_out = info.get("dmg", 1.0)
+	aggr = info.get("aggr", 0.3)
+	mass = stats["mass"] * info.get("mass", 1.0)
+	max_health = info.get("hp", stats["health"])
+	health = max_health
+	nitro = stats["nitro_cap"] * 0.4
+	_build()
+
+func _box(parent: Node3D, size: Vector3, pos: Vector3, c: Color, rough := 0.6, metal := 0.0) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	mi.mesh = bm
+	mi.material_override = mat(c, rough, metal)
+	mi.position = pos
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	return mi
+
+func _wheel(z: float) -> Node3D:
+	var w := Node3D.new()
+	w.position = Vector3(0, 0.34, z)
+	var mi := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.34; cm.bottom_radius = 0.34; cm.height = 0.2 + (0.06 if body_style == 3 else 0.0); cm.radial_segments = 10; cm.rings = 1
+	mi.mesh = cm
+	mi.rotation.z = PI / 2
+	mi.material_override = mat(Color(0.08, 0.08, 0.09), 0.9)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	w.add_child(mi)
+	_box(w, Vector3(0.24, 0.12, 0.12), Vector3.ZERO, Color(0.7, 0.7, 0.75), 0.3, 0.8)
+	add_child_deferred(w)
+	return w
+
+func add_child_deferred(n: Node) -> void:
+	model.add_child(n)
+
+func _build() -> void:
+	model = Node3D.new()
+	add_child(model)
+	var long := 1.0
+	var bar_h := 1.0
+	match body_style:
+		1: long = 0.9
+		2: long = 1.1
+		3: long = 1.05
+		4: long = 1.3; bar_h = 1.15
+	wheel_f = _wheel(-0.9 * long)
+	wheel_r = _wheel(0.82 * long)
+	var dark := Color(0.1, 0.1, 0.12)
+	_box(model, Vector3(0.22, 0.28, 1.2 * long), Vector3(0, 0.64, 0), dark, 0.5, 0.5)
+	_box(model, Vector3(0.32, 0.32, 0.45), Vector3(0, 0.46, 0.08), Color(0.35, 0.35, 0.4), 0.4, 0.7)
+	_box(model, Vector3(0.34 if body_style != 3 else 0.46, 0.26, 0.55), Vector3(0, 0.88, -0.2 * long), color, 0.35, 0.3)
+	_box(model, Vector3(0.28, 0.1, 0.6), Vector3(0, 0.82, 0.4 * long), Color(0.05, 0.05, 0.06))
+	var fork := _box(model, Vector3(0.08, 0.8, 0.08), Vector3(0, 0.68, -0.85 * long), Color(0.75, 0.75, 0.8), 0.3, 0.8)
+	fork.rotation.x = -0.32 if body_style != 4 else -0.55
+	_box(model, Vector3(0.74, 0.06, 0.06), Vector3(0, bar_h, -0.7 * long), Color(0.7, 0.7, 0.75), 0.3, 0.8)
+	_box(model, Vector3(0.22, 0.07, 0.35), Vector3(0, 0.62, 0.9 * long), color, 0.4)
+	if body_style == 3 or body_style == 4:
+		_box(model, Vector3(0.9, 0.2, 0.3), Vector3(0, 0.55, 0.55), Color(0.25, 0.25, 0.28), 0.5, 0.5)
+	rider = Node3D.new()
+	model.add_child(rider)
+	var lean_fwd := -0.5 if body_style in [1, 2] else -0.3
+	torso = Node3D.new()
+	torso.position = Vector3(0, 0.98, 0.38)
+	torso.rotation.x = lean_fwd
+	rider.add_child(torso)
+	_box(torso, Vector3(0.38, 0.56, 0.26), Vector3(0, 0.3, 0), Color(0.12, 0.12, 0.14).lerp(color, 0.25), 0.8)
+	var head := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 0.2; sm.height = 0.4; sm.radial_segments = 10; sm.rings = 6
+	head.mesh = sm
+	head_mat = StandardMaterial3D.new()
+	head_mat.albedo_color = color
+	head_mat.roughness = 0.3
+	head.material_override = head_mat
+	head.position = Vector3(0, 0.76, -0.02)
+	torso.add_child(head)
+	_box(torso, Vector3(0.28, 0.1, 0.1), Vector3(0, 0.76, -0.17), Color(0.05, 0.05, 0.08), 0.1)
+	arm_l = _arm(-1)
+	arm_r = _arm(1)
+	leg_l = _leg(-1)
+	leg_r = _leg(1)
+	var shadow := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(1.3, 2.6)
+	shadow.mesh = qm
+	var sm2 := StandardMaterial3D.new()
+	sm2.albedo_color = Color(0, 0, 0, 0.35)
+	sm2.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	sm2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	shadow.material_override = sm2
+	shadow.rotation.x = -PI / 2
+	shadow.position = Vector3(0, 0.03, 0.0)
+	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(shadow)
+	set_weapon("punch", 0)
+
+func _arm(side: int) -> Node3D:
+	var p := Node3D.new()
+	p.position = Vector3(0.24 * side, 0.52, 0)
+	p.rotation.x = -1.15
+	torso.add_child(p)
+	_box(p, Vector3(0.11, 0.48, 0.11), Vector3(0, -0.24, 0), Color(0.15, 0.15, 0.17).lerp(color, 0.3), 0.8)
+	var hand := Node3D.new()
+	hand.position = Vector3(0, -0.5, 0)
+	p.add_child(hand)
+	wpn_nodes.append(hand)
+	return p
+
+func _leg(side: int) -> Node3D:
+	var p := Node3D.new()
+	p.position = Vector3(0.17 * side, 0.82, 0.38)
+	p.rotation.x = -0.55
+	rider.add_child(p)
+	_box(p, Vector3(0.15, 0.52, 0.15), Vector3(0, -0.26, 0), Color(0.1, 0.12, 0.2), 0.8)
+	return p
+
+func set_weapon(id: String, dur: int) -> void:
+	weapon = id
+	weapon_dur = dur
+	for h in wpn_nodes:
+		for c in h.get_children():
+			c.queue_free()
+		match id:
+			"bat": _box(h, Vector3(0.09, 0.85, 0.09), Vector3(0, -0.3, 0), Color(0.55, 0.36, 0.18), 0.8)
+			"chain": _box(h, Vector3(0.05, 0.95, 0.05), Vector3(0, -0.4, 0), Color(0.6, 0.6, 0.65), 0.3, 0.9)
+			"pipe": _box(h, Vector3(0.08, 0.75, 0.08), Vector3(0, -0.28, 0), Color(0.45, 0.5, 0.55), 0.35, 0.9)
+
+# ---------------------------------------------------------------- actions
+func can_attack() -> bool:
+	return state != St.CRASHED and atk_cd <= 0.0 and not finished and crash_t <= 0.0
+
+func begin_attack(side: int, kick: bool) -> void:
+	var w: Dictionary = Data.WEAPONS["kick" if kick else weapon]
+	atk_cd = float(w["cd"])
+	anim_t = 0.0
+	anim_side = side
+	anim_kick = kick
+	Sfx.play("swing", 0.6, randf_range(0.9, 1.15))
+
+func use_weapon_dur() -> void:
+	if weapon != "punch" and weapon_dur > 0:
+		weapon_dur -= 1
+		if weapon_dur <= 0:
+			set_weapon("punch", 0)
+			event.emit("weapon_broke", {})
+
+func damage(amount: float, dmg_taken_mult := 1.0) -> void:
+	if invuln > 0.0 or health <= 0.0:
+		return
+	var d: float = amount * stats["dmg_mult"] * dmg_taken_mult
+	health = maxf(0.0, health - d)
+	cond = maxf(0.0, cond - d * 0.5)
+	hit_flash = 0.25
+
+func crash(sev: int, side := 1) -> void:
+	if crash_t > 0.0:
+		return
+	crash_t = 1.4 + 0.5 * sev
+	state = St.CRASHED
+	rider_vel = Vector3(side * randf_range(2.0, 4.0), randf_range(4.0, 6.5), randf_range(-6.0, -3.0)) * (0.6 + 0.2 * sev)
+	_spin = side * randf_range(5.0, 9.0)
+	tumble = 0.0
+	atk_cd = 0.0
+	event.emit("crash", {"sev": sev})
+
+func respawn() -> void:
+	crash_t = 0.0
+	state = St.RECOVERING
+	recover_t = 1.4
+	invuln = 2.2
+	v = 9.0
+	vx = 0.0
+	x = clampf(x, -6.0, 6.0)
+	rider.position = Vector3.ZERO
+	rider.rotation = Vector3.ZERO
+	model.rotation = Vector3.ZERO
+	cond = maxf(cond, 35.0)
+
+# ---------------------------------------------------------------- physics
+func step(dt: float, track: Track, active: bool) -> void:
+	atk_cd = maxf(0.0, atk_cd - dt)
+	invuln = maxf(0.0, invuln - dt)
+	hit_flash = maxf(0.0, hit_flash - dt)
+	bump_t = maxf(0.0, bump_t - dt)
+	if anim_t < 1.0:
+		anim_t = minf(1.0, anim_t + dt / (0.38 if not anim_kick else 0.5))
+	if crash_t > 0.0:
+		crash_t -= dt
+		v = maxf(0.0, v - 28.0 * dt)
+		vx *= exp(-2.0 * dt)
+		s += v * dt
+		x = clampf(x + vx * dt, -Track.BARRIER + 0.5, Track.BARRIER - 0.5)
+		rider_vel.y -= 16.0 * dt
+		rider.position += rider_vel * dt
+		if rider.position.y < 0.0:
+			rider.position.y = 0.0
+			rider_vel.x *= 0.6
+			rider_vel.y = absf(rider_vel.y) * 0.25 if rider_vel.y < -2.0 else 0.0
+			rider_vel.z *= 0.8
+		rider.rotation.z += _spin * dt * 0.6
+		model.rotation.z += _spin * dt * 0.4 * minf(1.0, crash_t)
+		tumble += dt
+		if crash_t <= 0.0 and not (is_player and health <= 0.0):
+			respawn()
+		return
+	if state == St.RECOVERING:
+		recover_t -= dt
+		if recover_t <= 0.0:
+			state = St.RACING
+	var cond_f := 0.75 + 0.25 * cond / 100.0
+	var dirt_zone := track.in_shortcut(s) and x > Track.BARRIER - 1.2
+	on_dirt = dirt_zone
+	var off_road := absf(x) > Track.ROAD_HALF + 0.2 and not dirt_zone
+	var terrain := 1.0
+	if dirt_zone:
+		terrain = float(stats["dirt"])
+	elif off_road:
+		terrain = 0.72
+	var vmax: float = stats["vmax"] * spd_mult * cond_f * terrain
+	var acc: float = stats["acc"] * acc_mult
+	nitro_on = false
+	if active and inp["nitro"] and nitro > 1.0 and state != St.FINISHING and state != St.IDLE:
+		nitro_on = true
+		nitro = maxf(0.0, nitro - 26.0 * dt)
+		vmax *= 1.2
+		acc *= 2.0
+	elif active:
+		nitro = minf(stats["nitro_cap"], nitro + stats["nitro_regen"] * 0.5 * dt)
+	var throttle: float = inp["throttle"] if active else 0.0
+	if state == St.FINISHING:
+		throttle = 0.0
+	var a := 0.0
+	if throttle > 0.0:
+		if v < vmax:
+			a = acc * (1.0 - pow(v / vmax, 1.7)) * throttle
+		else:
+			a = -(v - vmax) * 1.4
+	else:
+		a = -3.5 if state != St.FINISHING else -9.0
+	if inp["brake"] > 0.0:
+		a = -stats["brake"] * float(inp["brake"])
+	v = maxf(0.0, v + a * dt)
+	# lateral
+	steer_i = move_toward(steer_i, float(inp["steer"]) if active else 0.0, dt * 7.0)
+	var hnd: float = stats["grip"] * (0.8 + 0.2 * cond_f)
+	var grip := hnd * (1.0 - 0.35 * clampf(v / 70.0, 0.0, 1.0)) * (terrain if terrain < 1.0 else 1.0)
+	var drift := track.curve_at(s) * v * v * 0.30
+	vx += (steer_i * grip + drift) * dt
+	vx *= exp(-3.2 * dt)
+	vx = clampf(vx, -15.0, 15.0)
+	x += vx * dt
+	var gain := track.shortcut_gain if dirt_zone else 1.0
+	s += v * dt * gain
+	# shortcut exit: nudge back to the road
+	if track.shortcut.y > 0.0 and s > track.shortcut.y - 45.0 and s < track.shortcut.y + 20.0 and x > Track.ROAD_HALF - 1.0:
+		vx -= 11.0 * dt
+	scrape = false
+	_barrier(track)
+
+func _barrier(track: Track) -> void:
+	var lim := Track.BARRIER - 0.4
+	var in_sc := track.in_shortcut(s)
+	var right_lim := Track.DIRT_OUT - 0.5 if in_sc else lim
+	if x > right_lim or x < -lim:
+		var sg := 1.0 if x > 0.0 else -1.0
+		x = right_lim if sg > 0.0 else -lim
+		var closing := vx * sg
+		if closing > 0.0:
+			vx = -closing * 0.35 * sg
+			if invuln <= 0.0 and not (in_sc and sg > 0.0):
+				var sev := 0
+				if closing > 9.0 or (closing > 6.0 and v > 45.0):
+					sev = 2
+				elif closing > 4.5:
+					sev = 1
+				v *= [0.9, 0.78, 0.55][sev]
+				damage([2.0, 6.0, 14.0][sev])
+				invuln = 0.5
+				event.emit("wall", {"sev": sev, "side": sg})
+				if sev == 2:
+					crash(2, int(-sg))
+			elif in_sc and sg > 0.0:
+				v *= 0.9
+		else:
+			scrape = v > 20.0
+			v = maxf(0.0, v - 14.0 * get_physics_process_delta_time())
+			cond = maxf(0.0, cond - 0.8 * get_physics_process_delta_time())
+
+func place_in_world(track: Track, dt: float) -> void:
+	var pitch := atan(track.slope_at(s))
+	var yw := track.yaw_at(s) - atan2(vx, maxf(v, 8.0)) * 0.9
+	var gy := track.pos_at(s, x).y
+	position = track.pos_at(s, x)
+	rotation = Vector3(pitch, yw, 0.0)
+	if crash_t <= 0.0:
+		var target_roll := -vx * 0.045 + track.curve_at(s) * v * 1.4
+		roll = lerpf(roll, clampf(target_roll, -0.7, 0.7), clampf(dt * 9.0, 0.0, 1.0))
+		model.rotation = Vector3(0, 0, roll)
+	var spin := v * dt / 0.34
+	wheel_f.rotation.x -= spin
+	wheel_r.rotation.x -= spin
+	# melee animation
+	var sw := sin(PI * clampf(anim_t, 0.0, 1.0)) if anim_t < 1.0 else 0.0
+	var ar := arm_r if anim_side > 0 else arm_l
+	var al := arm_l if anim_side > 0 else arm_r
+	for a in [arm_l, arm_r]:
+		a.rotation = Vector3(-1.15, 0, 0)
+	for l in [leg_l, leg_r]:
+		l.rotation = Vector3(-0.55, 0, 0)
+	if sw > 0.0:
+		if anim_kick:
+			var lg := leg_r if anim_side > 0 else leg_l
+			lg.rotation = Vector3(-0.55 + sw * 0.4, 0, anim_side * sw * 1.4)
+		else:
+			ar.rotation = Vector3(-1.15 + sw * 1.0, 0, anim_side * sw * 1.55)
+	if hit_flash > 0.0:
+		head_mat.emission_enabled = true
+		head_mat.emission = Color(1, 1, 1)
+		head_mat.emission_energy_multiplier = hit_flash * 6.0
+	elif head_mat.emission_enabled:
+		head_mat.emission_enabled = false
+	visible = invuln <= 0.0 or int(invuln * 12.0) % 2 == 0 or crash_t > 0.0

@@ -1,0 +1,28 @@
+; Road Warriors - Godot 4 project file
+config_version=5
+
+[application]
+config/name="Road Warriors"
+config/quit_on_go_back=false
+config/description="Arcade motorcycle combat racing."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "Mobile")
+boot_splash/bg_color=Color(0.1, 0.1, 0.13, 1)
+config/icon="res://icon.svg"
+
+[autoload]
+Save="*res://scripts/save.gd"
+Sfx="*res://scripts/sfx.gd"
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=0
+
+[rendering]
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="mobile"
+textures/vram_compression/import_etc2_astc=true
+anti_aliasing/quality/msaa_3d=0
