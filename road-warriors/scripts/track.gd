@@ -88,9 +88,55 @@ static func generate(d: Dictionary) -> Array:
 	out.append(seg(300, 0, 0, 0, theme))
 	return out
 
+## Real road baked from OpenStreetMap by tools/fetch_route.py: points every 4 m, x east / z north.
+static func from_route(d: Dictionary) -> Array:
+	var f := FileAccess.open("res://data/routes/%s.json" % d["route"], FileAccess.READ)
+	var js: Dictionary = JSON.parse_string(f.get_as_text())
+	var pts: Array = js["pts"]
+	var fl: Array = js["flags"]
+	var m := mini(pts.size() - 1, int(float(d["len"]) / STEP) + 120)
+	var hd: Array = []
+	for i in m:
+		var a: Array = pts[i]
+		var b: Array = pts[i + 1]
+		hd.append(atan2(float(b[0]) - float(a[0]), float(b[1]) - float(a[1])))
+	var raw: Array = []
+	for i in range(1, hd.size()):
+		raw.append(-wrapf(float(hd[i]) - float(hd[i - 1]), -PI, PI) / STEP)
+	raw.append(0.0)
+	var out: Array = []
+	for i in raw.size():
+		var acc := 0.0
+		var cnt := 0
+		for j in range(maxi(0, i - 4), mini(raw.size(), i + 5)):
+			acc += float(raw[j]); cnt += 1
+		var c := clampf(acc / cnt, -0.03, 0.03)
+		var ft: int = int(fl[i]) & 3
+		out.append(seg(STEP, c, 0.0, ft, int(d["theme"])))
+	# drop bridge/tunnel runs shorter than 12 samples
+	var i := 0
+	while i < out.size():
+		var ft: int = out[i]["feat"]
+		if ft == 0:
+			i += 1; continue
+		var j := i
+		while j < out.size() and out[j]["feat"] == ft:
+			j += 1
+		if j - i < 12:
+			for k in range(i, j):
+				out[k]["feat"] = 0
+		i = j
+	out.append(seg(300, 0, 0, 0, int(d["theme"])))
+	return out
+
 func build(d: Dictionary) -> void:
 	def = d
-	segs = d["segs"] if d.has("segs") else generate(d)
+	if d.has("segs"):
+		segs = d["segs"]
+	elif d.has("route"):
+		segs = from_route(d)
+	else:
+		segs = generate(d)
 	var total := 0.0
 	for sg in segs:
 		total += float(sg["len"])

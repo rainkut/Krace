@@ -89,6 +89,9 @@ const RACES := [
 	{"id": "r7", "name": "Revenge: Tank Orlo", "mode": "revenge", "len": 9000, "theme": 0, "seed": 79, "req": 240,
 		"rivals": ["heavy", "balanced", "defensive"], "traffic": 0.6, "reward": 2600, "rep": 80, "target_rival": 0,
 		"blurb": "Tank Orlo forced you off the road last season. Knock him out before the line.", "shortcut": true, "need_place": 0},
+	{"id": "r8", "name": "Marine Drive to Worli", "mode": "race", "len": 12000, "theme": 1, "seed": 91, "req": 280, "route": "mumbai",
+		"rivals": ["speed", "aggressive", "balanced", "heavy", "defensive"], "traffic": 0.9, "reward": 3200, "rep": 90,
+		"blurb": "A real route: Marine Drive, Haji Ali, the Bandra-Worli Sea Link. Mapped from OpenStreetMap.", "shortcut": false, "need_place": 2},
 ]
 
 static func bike(id: String) -> Dictionary:
