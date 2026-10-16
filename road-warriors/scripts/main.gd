@@ -204,7 +204,7 @@ func _set_preview(bike_id: String) -> void:
 func _process(dt: float) -> void:
 	if prev_holder != null and is_instance_valid(prev_holder):
 		prev_angle += dt * 0.6
-		prev_holder.rotation.y = prev_angle
+		prev_holder.rotation.y = sin(prev_angle) * 0.45
 	if race != null and gstate in ["COUNTDOWN", "RACING"]:
 		gstate = "COUNTDOWN" if race.state == Race.RState.COUNTDOWN else "RACING"
 		if sim_id != "":
@@ -244,6 +244,7 @@ func show_menu() -> void:
 	v.add_child(_btn("CAREER", show_race_select, 340, 30))
 	v.add_child(_btn("GARAGE", show_garage, 340, 30))
 	v.add_child(_btn("SETTINGS", func() -> void: show_settings(show_menu), 340, 30))
+	v.add_child(_btn("CREDITS", show_credits, 340, 30))
 	if OS.get_name() != "Android" and OS.get_name() != "iOS" and OS.get_name() != "Web":
 		v.add_child(_btn("QUIT", func() -> void: get_tree().quit(), 340, 30))
 	var sp2 := Control.new()
@@ -560,6 +561,26 @@ func show_settings(back: Callable) -> void:
 		confirm_reset = false
 		Save.write()
 		settings_back.call(), 160))
+
+func show_credits() -> void:
+	gstate = "SETTINGS"
+	_clear()
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.04, 0.07, 0.96)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ui.add_child(dim)
+	var m := _full(ui)
+	var root := VBoxContainer.new()
+	root.add_theme_constant_override("separation", 12)
+	m.add_child(root)
+	root.add_child(_lbl("CREDITS", 44, ACC))
+	for line in ["Road Warriors - made with Godot Engine 4 (MIT licence)",
+			"Bike art: original designs, modelled and rendered in Blender (GPL tool, output is ours)",
+			"Music and sound effects: original, generated in-house for this game",
+			"No third-party music, logos or trademarks are used.",
+			"Real roads in the Mumbai race: (c) OpenStreetMap contributors, ODbL"]:
+		root.add_child(_lbl(line, 22, DIM))
+	root.add_child(_btn("BACK", show_menu, 160))
 
 func _unhandled_input(e: InputEvent) -> void:
 	if rebind_action != "" and e is InputEventKey and e.pressed and not e.echo:

@@ -78,36 +78,171 @@ func setup(race_def: Dictionary) -> void:
 	cam.current = true
 	add_child(cam)
 	_update_camera(0.1, true)
-	Sfx.music(true)
+	_build_weather()
+	Sfx.music(true, "music_night" if tod == "night" else "music")
 
 func _exit_tree() -> void:
 	Sfx.engine(false)
 
 # ---------------------------------------------------------------- world
+const TOD := {"r2": "night", "r5": "night", "r8": "night", "r6": "dusk"}
+const WEATHER := {"r2": "rain", "r5": "rain", "r4": "fog", "r7": "fog", "r3": "dust"}
+var tod := "day"
+var weather := "clear"
+var env_ref: Environment
+var amb_base := 0.75
+var flash := 0.0
+var flash_t := 4.0
+var headlight: SpotLight3D
+
 func _build_world() -> void:
 	var theme := int(def.get("theme", 0))
-	var sky := [Color(0.62, 0.78, 0.95), Color(0.30, 0.22, 0.42), Color(0.96, 0.78, 0.55)][theme] as Color
+	tod = TOD.get(str(def.get("id", "")), "day")
+	weather = WEATHER.get(str(def.get("id", "")), "clear")
+	var top := [Color(0.25, 0.48, 0.85), Color(0.12, 0.08, 0.28), Color(0.30, 0.42, 0.70)][theme] as Color
+	var hor := [Color(0.72, 0.84, 0.96), Color(0.62, 0.36, 0.52), Color(0.98, 0.76, 0.50)][theme] as Color
 	var amb := [Color(0.62, 0.66, 0.72), Color(0.55, 0.48, 0.62), Color(0.78, 0.68, 0.58)][theme] as Color
+	var sun_e := [1.15, 0.8, 1.3][theme] as float
+	var sun_c := [Color(1, 0.97, 0.9), Color(1.0, 0.7, 0.55), Color(1, 0.9, 0.75)][theme] as Color
+	var fogd := 0.0018
+	if tod == "dusk":
+		top = Color(0.20, 0.16, 0.42); hor = Color(1.0, 0.52, 0.30); amb = Color(0.62, 0.48, 0.50); sun_e = 0.7; sun_c = Color(1.0, 0.55, 0.35)
+	elif tod == "night":
+		top = Color(0.02, 0.03, 0.09); hor = Color(0.10, 0.12, 0.26); amb = Color(0.20, 0.24, 0.42); sun_e = 0.25; sun_c = Color(0.55, 0.65, 1.0); fogd = 0.0026
+	if weather == "rain":
+		top = top.lerp(Color(0.25, 0.27, 0.32), 0.55); hor = hor.lerp(Color(0.38, 0.40, 0.46), 0.6); sun_e *= 0.55; fogd = 0.0042
+	elif weather == "fog":
+		top = top.lerp(Color(0.66, 0.68, 0.72), 0.7); hor = hor.lerp(Color(0.72, 0.74, 0.78), 0.85); sun_e *= 0.6; fogd = 0.0085
+	elif weather == "dust":
+		hor = hor.lerp(Color(0.86, 0.66, 0.42), 0.5); fogd = 0.0034
+	var psm := ProceduralSkyMaterial.new()
+	psm.sky_top_color = top
+	psm.sky_horizon_color = hor
+	psm.ground_horizon_color = hor
+	psm.ground_bottom_color = hor.darkened(0.3)
+	psm.sun_angle_max = 25.0
+	var sky := Sky.new()
+	sky.sky_material = psm
 	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = sky
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = amb
-	env.ambient_light_energy = 0.75
+	amb_base = 0.75 if tod != "night" else 0.9
+	env.ambient_light_energy = amb_base
 	env.fog_enabled = true
-	env.fog_light_color = sky
-	env.fog_density = 0.0018
+	env.fog_light_color = hor
+	env.fog_density = fogd
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.glow_enabled = true
+	env.glow_intensity = 0.9
+	env.glow_bloom = 0.15
+	env.glow_hdr_threshold = 0.9
+	env_ref = env
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-48, -35, 0)
-	sun.light_energy = [1.15, 0.8, 1.3][theme]
-	sun.light_color = [Color(1, 0.97, 0.9), Color(1.0, 0.7, 0.55), Color(1, 0.9, 0.75)][theme]
+	sun.rotation_degrees = Vector3(-48, -35, 0) if tod != "dusk" else Vector3(-14, -35, 0)
+	sun.light_energy = sun_e
+	sun.light_color = sun_c
 	sun.shadow_enabled = false
 	add_child(sun)
 	track.build_visuals(self)
+	if tod != "day" or weather == "rain" or weather == "fog":
+		_build_lamps()
+
+func _build_lamps() -> void:
+	var step := 36.0
+	var n := int(float(def["len"]) / step)
+	var pole := CylinderMesh.new()
+	pole.top_radius = 0.07; pole.bottom_radius = 0.09; pole.height = 6.0
+	var head := BoxMesh.new()
+	head.size = Vector3(0.9, 0.18, 0.35)
+	var pm := StandardMaterial3D.new()
+	pm.albedo_color = Color(0.16, 0.17, 0.20)
+	var hm := StandardMaterial3D.new()
+	hm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	hm.albedo_color = Color(1.0, 0.82, 0.5) * 2.2 if tod == "night" else Color(1.0, 0.82, 0.5)
+	hm.emission_enabled = true
+	hm.emission = Color(1.0, 0.75, 0.4)
+	hm.emission_energy_multiplier = 3.0
+	var mp := MultiMesh.new(); mp.transform_format = MultiMesh.TRANSFORM_3D; mp.mesh = pole; mp.instance_count = n * 2
+	var mh := MultiMesh.new(); mh.transform_format = MultiMesh.TRANSFORM_3D; mh.mesh = head; mh.instance_count = n * 2
+	for i in n:
+		for sd in 2:
+			var x := (Track.ROAD_HALF + 1.4) * (1.0 if sd == 0 else -1.0)
+			var s := 20.0 + i * step + sd * 18.0
+			var base := track.pos_at(s, x, 0.0)
+			mp.set_instance_transform(i * 2 + sd, Transform3D(Basis(), base + Vector3(0, 3.0, 0)))
+			mh.set_instance_transform(i * 2 + sd, Transform3D(Basis(), base + Vector3(-x * 0.03, 6.0, 0)))
+	var a := MultiMeshInstance3D.new(); a.multimesh = mp; a.material_override = pm; add_child(a)
+	var b := MultiMeshInstance3D.new(); b.multimesh = mh; b.material_override = hm; b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; add_child(b)
+
+func _build_weather() -> void:
+	if tod != "day" or weather == "rain":
+		headlight = SpotLight3D.new()
+		headlight.spot_range = 70.0
+		headlight.spot_angle = 32.0
+		headlight.light_energy = 6.0 if tod == "night" else 2.5
+		headlight.light_color = Color(1.0, 0.95, 0.82)
+		headlight.position = Vector3(0, -0.2, -0.5)
+		cam.add_child(headlight)
+	if weather == "rain":
+		var pr := CPUParticles3D.new()
+		pr.amount = 700
+		pr.lifetime = 0.9
+		pr.local_coords = false
+		pr.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+		pr.emission_box_extents = Vector3(14, 0.5, 22)
+		pr.position = Vector3(0, 11, -14)
+		pr.direction = Vector3(0, -1, 0.25)
+		pr.spread = 3.0
+		pr.initial_velocity_min = 34.0
+		pr.initial_velocity_max = 40.0
+		pr.gravity = Vector3.ZERO
+		var q := BoxMesh.new()
+		q.size = Vector3(0.012, 0.9, 0.012)
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.albedo_color = Color(0.75, 0.82, 0.95, 0.5)
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		q.material = m
+		pr.mesh = q
+		cam.add_child(pr)
+	elif weather == "dust":
+		var pr2 := CPUParticles3D.new()
+		pr2.amount = 120
+		pr2.lifetime = 2.0
+		pr2.local_coords = false
+		pr2.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+		pr2.emission_box_extents = Vector3(14, 3, 20)
+		pr2.position = Vector3(0, 1, -14)
+		pr2.direction = Vector3(-1, 0.1, 0)
+		pr2.initial_velocity_min = 8.0
+		pr2.initial_velocity_max = 14.0
+		pr2.gravity = Vector3.ZERO
+		var d := SphereMesh.new()
+		d.radius = 0.05; d.height = 0.1
+		var dm := StandardMaterial3D.new()
+		dm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		dm.albedo_color = Color(0.9, 0.75, 0.5, 0.5)
+		dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		d.material = dm
+		pr2.mesh = d
+		cam.add_child(pr2)
+
+func _update_atmosphere(dt: float) -> void:
+	if headlight != null:
+		var tun := (track.feat_at(player.s) & Track.F_TUNNEL) != 0
+		headlight.light_energy = lerpf(headlight.light_energy, (6.0 if tod == "night" else 2.5) + (3.0 if tun else 0.0), dt * 3.0)
+	if weather == "rain" and env_ref != null:
+		flash_t -= dt
+		if flash_t <= 0.0:
+			flash = 1.0
+			flash_t = randf_range(5.0, 12.0)
+		flash = maxf(0.0, flash - dt * 3.5)
+		env_ref.ambient_light_energy = amb_base + flash * 2.2 * (1.0 if sin(flash * 40.0) > -0.3 else 0.3)
 
 func _bike_for_arch(a: String) -> String:
 	return {"balanced": "dustrunner", "speed": "viper", "heavy": "boulder", "aggressive": "hornet", "defensive": "ironclad"}.get(a, "dustrunner")
@@ -356,6 +491,7 @@ func _physics_process(dt: float) -> void:
 				n.rotation.y += dt * 2.5
 	track.update_visibility(player.s, VIEW)
 	_update_camera(dt, false)
+	_update_atmosphere(dt)
 	var sp01 := clampf(player.v / maxf(1.0, float(player.stats["vmax"]) * 1.2), 0.0, 1.0)
 	Sfx.engine(state != RState.GAME_OVER and player.crash_t <= 0.0, sp01, player.nitro_on)
 
@@ -795,8 +931,8 @@ func _end(win: bool, reason: String, game_over: bool) -> void:
 # ---------------------------------------------------------------- camera
 func _update_camera(dt: float, snap: bool) -> void:
 	var p := player
-	var back := 5.4 + p.v * 0.035
-	var height := 2.3 + p.v * 0.008
+	var back := 3.9 + p.v * 0.022
+	var height := 1.75 + p.v * 0.006
 	var cs := p.s - back
 	var want := track.pos_at(cs, p.x * 0.8, height)
 	if not cam_init or snap:
@@ -815,7 +951,7 @@ func _update_camera(dt: float, snap: bool) -> void:
 	cam.look_at(look + off * 0.5, Vector3.UP)
 	var tilt := -p.vx * 0.012 - track.curve_at(p.s) * p.v * 0.35
 	cam.rotate_object_local(Vector3(0, 0, 1), clampf(tilt, -0.2, 0.2))
-	var tfov := 68.0 + p.v * 0.22 + (9.0 if p.nitro_on else 0.0)
+	var tfov := 62.0 + p.v * 0.13 + (9.0 if p.nitro_on else 0.0)
 	cam.fov = lerpf(cam.fov, tfov, clampf(dt * 4.0, 0.0, 1.0))
 
 # ---------------------------------------------------------------- debug helpers

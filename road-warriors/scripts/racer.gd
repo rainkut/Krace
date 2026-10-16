@@ -55,8 +55,75 @@ var bump_t := 0.0
 var score := 0.0
 
 var model: Node3D
-var wheel_f: Node3D
-var wheel_r: Node3D
+var spr: Sprite3D
+var spr_empty: Sprite3D
+var glow_tail: MeshInstance3D
+var flames: Array[MeshInstance3D] = []
+var body_parts: Array[Node3D] = []
+var _frame := -1
+var _bob := 0.0
+const BIKE_IDS := ["thunderbolt", "nightbreaker", "scrambler", "commuter", "streak"]
+const LEAN_DEG := [-30, -20, -10, 0, 10, 20, 30]
+const SPR_PX := 2.5 / 384.0
+const SPR_Y := 0.80
+# per-bike: shoulder height, shoulder z, tail light (y,z), exhaust x list + (y,z)
+const BSH := [1.50, 1.33, 1.61, 1.41, 1.33]
+const BSZ := [0.15, 0.28, 0.09, 0.16, 0.12]
+const BTAIL := [Vector2(0.34, 0.06), Vector2(0.26, 0.06), Vector2(0.48, 0.06), Vector2(0.34, 0.06), Vector2(0.52, 0.06)]
+const BEXH := [[0.20], [-0.21, 0.21], [0.23], [0.17], [0.0]]
+const BEXY := [Vector2(0.2, 0.06), Vector2(0.25, 0.06), Vector2(0.69, 0.06), Vector2(0.24, 0.06), Vector2(0.47, 0.06)]
+static var _tex := {}
+static var _glow_tex: GradientTexture2D
+
+static func tex(path: String) -> Texture2D:
+	if not _tex.has(path):
+		_tex[path] = load(path)
+	return _tex[path]
+
+static func glow_tex() -> GradientTexture2D:
+	if _glow_tex == null:
+		var g := Gradient.new()
+		g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0)])
+		_glow_tex = GradientTexture2D.new()
+		_glow_tex.gradient = g
+		_glow_tex.fill = GradientTexture2D.FILL_RADIAL
+		_glow_tex.fill_from = Vector2(0.5, 0.5)
+		_glow_tex.fill_to = Vector2(1.0, 0.5)
+		_glow_tex.width = 64
+		_glow_tex.height = 64
+	return _glow_tex
+
+func _glow(c: Color, size: float, pos: Vector3) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(size, size)
+	mi.mesh = qm
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.albedo_texture = glow_tex()
+	m.albedo_color = c
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.no_depth_test = false
+	mi.material_override = m
+	mi.position = pos
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	model.add_child(mi)
+	return mi
+
+func _sprite(path: String) -> Sprite3D:
+	var sp := Sprite3D.new()
+	sp.texture = tex(path)
+	sp.pixel_size = SPR_PX
+	sp.shaded = false
+	sp.double_sided = true
+	sp.alpha_cut = SpriteBase3D.ALPHA_CUT_OPAQUE_PREPASS
+	sp.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
+	sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	sp.position = Vector3(0, SPR_Y, 0)
+	model.add_child(sp)
+	return sp
 var torso: Node3D
 var arm_l: Node3D
 var arm_r: Node3D
@@ -107,55 +174,27 @@ func _box(parent: Node3D, size: Vector3, pos: Vector3, c: Color, rough := 0.6, m
 	parent.add_child(mi)
 	return mi
 
-func _wheel(z: float) -> Node3D:
-	var w := Node3D.new()
-	w.position = Vector3(0, 0.34, z)
-	var mi := MeshInstance3D.new()
-	var cm := CylinderMesh.new()
-	cm.top_radius = 0.34; cm.bottom_radius = 0.34; cm.height = 0.2 + (0.06 if body_style == 3 else 0.0); cm.radial_segments = 10; cm.rings = 1
-	mi.mesh = cm
-	mi.rotation.z = PI / 2
-	mi.material_override = mat(Color(0.08, 0.08, 0.09), 0.9)
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	w.add_child(mi)
-	_box(w, Vector3(0.24, 0.12, 0.12), Vector3.ZERO, Color(0.7, 0.7, 0.75), 0.3, 0.8)
-	add_child_deferred(w)
-	return w
-
-func add_child_deferred(n: Node) -> void:
-	model.add_child(n)
-
 func _build() -> void:
 	model = Node3D.new()
 	add_child(model)
-	var long := 1.0
-	var bar_h := 1.0
-	match body_style:
-		1: long = 0.9
-		2: long = 1.1
-		3: long = 1.05
-		4: long = 1.3; bar_h = 1.15
-	wheel_f = _wheel(-0.9 * long)
-	wheel_r = _wheel(0.82 * long)
-	var dark := Color(0.1, 0.1, 0.12)
-	_box(model, Vector3(0.22, 0.28, 1.2 * long), Vector3(0, 0.64, 0), dark, 0.5, 0.5)
-	_box(model, Vector3(0.32, 0.32, 0.45), Vector3(0, 0.46, 0.08), Color(0.35, 0.35, 0.4), 0.4, 0.7)
-	_box(model, Vector3(0.34 if body_style != 3 else 0.46, 0.26, 0.55), Vector3(0, 0.88, -0.2 * long), color, 0.35, 0.3)
-	_box(model, Vector3(0.28, 0.1, 0.6), Vector3(0, 0.82, 0.4 * long), Color(0.05, 0.05, 0.06))
-	var fork := _box(model, Vector3(0.08, 0.8, 0.08), Vector3(0, 0.68, -0.85 * long), Color(0.75, 0.75, 0.8), 0.3, 0.8)
-	fork.rotation.x = -0.32 if body_style != 4 else -0.55
-	_box(model, Vector3(0.74, 0.06, 0.06), Vector3(0, bar_h, -0.7 * long), Color(0.7, 0.7, 0.75), 0.3, 0.8)
-	_box(model, Vector3(0.22, 0.07, 0.35), Vector3(0, 0.62, 0.9 * long), color, 0.4)
-	if body_style == 3 or body_style == 4:
-		_box(model, Vector3(0.9, 0.2, 0.3), Vector3(0, 0.55, 0.55), Color(0.25, 0.25, 0.28), 0.5, 0.5)
+	var id: String = BIKE_IDS[clampi(body_style, 0, 4)]
+	spr = _sprite("res://assets/bikes/%s_3.png" % id)
+	spr_empty = _sprite("res://assets/bikes/%s_empty_3.png" % id)
+	spr_empty.visible = false
+	var tp: Vector2 = BTAIL[body_style]
+	glow_tail = _glow(Color(1.0, 0.1, 0.05, 0.85), 0.28, Vector3(0, tp.x, tp.y))
+	var ey: Vector2 = BEXY[body_style]
+	for x in BEXH[body_style]:
+		var f := _glow(Color(1.0, 0.55, 0.15, 0.0), 1.1, Vector3(x, ey.x, ey.y))
+		flames.append(f)
 	rider = Node3D.new()
 	model.add_child(rider)
 	var lean_fwd := -0.5 if body_style in [1, 2] else -0.3
 	torso = Node3D.new()
-	torso.position = Vector3(0, 0.98, 0.38)
+	torso.position = Vector3(0, BSH[body_style] - 0.52, BSZ[body_style])
 	torso.rotation.x = lean_fwd
 	rider.add_child(torso)
-	_box(torso, Vector3(0.38, 0.56, 0.26), Vector3(0, 0.3, 0), Color(0.12, 0.12, 0.14).lerp(color, 0.25), 0.8)
+	body_parts.append(_box(torso, Vector3(0.38, 0.56, 0.26), Vector3(0, 0.3, 0), Color(0.12, 0.12, 0.14).lerp(color, 0.25), 0.8))
 	var head := MeshInstance3D.new()
 	var sm := SphereMesh.new()
 	sm.radius = 0.2; sm.height = 0.4; sm.radial_segments = 10; sm.rings = 6
@@ -166,17 +205,20 @@ func _build() -> void:
 	head.material_override = head_mat
 	head.position = Vector3(0, 0.76, -0.02)
 	torso.add_child(head)
-	_box(torso, Vector3(0.28, 0.1, 0.1), Vector3(0, 0.76, -0.17), Color(0.05, 0.05, 0.08), 0.1)
+	body_parts.append(head)
+	body_parts.append(_box(torso, Vector3(0.28, 0.1, 0.1), Vector3(0, 0.76, -0.17), Color(0.05, 0.05, 0.08), 0.1))
 	arm_l = _arm(-1)
 	arm_r = _arm(1)
 	leg_l = _leg(-1)
 	leg_r = _leg(1)
+	body_parts.append(leg_l)
+	body_parts.append(leg_r)
 	var shadow := MeshInstance3D.new()
 	var qm := QuadMesh.new()
 	qm.size = Vector2(1.3, 2.6)
 	shadow.mesh = qm
 	var sm2 := StandardMaterial3D.new()
-	sm2.albedo_color = Color(0, 0, 0, 0.35)
+	sm2.albedo_color = Color(0, 0, 0, 0.26)
 	sm2.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	sm2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	shadow.material_override = sm2
@@ -387,12 +429,29 @@ func place_in_world(track: Track, dt: float) -> void:
 	if crash_t <= 0.0:
 		var target_roll := -vx * 0.045 + track.curve_at(s) * v * 1.4
 		roll = lerpf(roll, clampf(target_roll, -0.7, 0.7), clampf(dt * 9.0, 0.0, 1.0))
-		model.rotation = Vector3(0, 0, roll)
-	var spin := v * dt / 0.34
-	wheel_f.rotation.x -= spin
-	wheel_r.rotation.x -= spin
+		var idx := clampi(roundi((-rad_to_deg(roll) + 30.0) / 10.0), 0, 6)
+		if idx != _frame:
+			_frame = idx
+			spr.texture = tex("res://assets/bikes/%s_%d.png" % [BIKE_IDS[body_style], idx])
+		model.rotation = Vector3(0, 0, roll + deg_to_rad(LEAN_DEG[idx]))
+	_bob += dt * (20.0 + v * 0.5)
+	spr.position.y = SPR_Y + sin(_bob) * 0.006 * clampf(v / 40.0, 0.0, 1.0)
+	spr.rotation.x = lerpf(spr.rotation.x, -0.07 if nitro_on else 0.0, clampf(dt * 6.0, 0.0, 1.0))
+	spr_empty.position.y = spr.position.y
+	var crashed := crash_t > 0.0
+	spr.visible = not crashed
+	spr_empty.visible = crashed
+	for p in body_parts:
+		p.visible = crashed
+	for f in flames:
+		var fm := f.material_override as StandardMaterial3D
+		fm.albedo_color.a = lerpf(fm.albedo_color.a, 0.95 if nitro_on else 0.0, clampf(dt * 12.0, 0.0, 1.0))
+		f.scale = Vector3.ONE * (1.0 + 0.35 * sin(_bob * 3.0))
 	# melee animation
 	var sw := sin(PI * clampf(anim_t, 0.0, 1.0)) if anim_t < 1.0 else 0.0
+	var arms_on := crashed or sw > 0.0 or weapon != "punch"
+	arm_l.visible = arms_on
+	arm_r.visible = arms_on
 	var ar := arm_r if anim_side > 0 else arm_l
 	var al := arm_l if anim_side > 0 else arm_r
 	for a in [arm_l, arm_r]:
@@ -405,6 +464,8 @@ func place_in_world(track: Track, dt: float) -> void:
 			lg.rotation = Vector3(-0.55 + sw * 0.4, 0, anim_side * sw * 1.4)
 		else:
 			ar.rotation = Vector3(-1.15 + sw * 1.0, 0, anim_side * sw * 1.55)
+	var hf := 1.0 + hit_flash * 3.0
+	spr.modulate = Color(hf, hf, hf, 1.0)
 	if hit_flash > 0.0:
 		head_mat.emission_enabled = true
 		head_mat.emission = Color(1, 1, 1)

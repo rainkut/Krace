@@ -3,20 +3,20 @@ extends RefCounted
 ## Static game content: bikes, upgrades, weapons, difficulty, races.
 
 const BIKES := [
-	{"id": "dustrunner", "name": "Dustrunner", "price": 0, "color": Color(0.92, 0.45, 0.12), "body": 0,
-		"desc": "Honest all-rounder. Starts every career.",
+	{"id": "dustrunner", "name": "Thunderbolt 350", "price": 0, "color": Color(0.10, 0.45, 0.28), "body": 0,
+		"desc": "Classic single-cylinder thumper. Honest all-rounder, starts every career.",
 		"speed": 0.50, "accel": 0.55, "handling": 0.55, "armor": 0.45, "nitro": 0.50, "weight": 0.50},
-	{"id": "hornet", "name": "Hornet S", "price": 1800, "color": Color(0.95, 0.80, 0.10), "body": 1,
-		"desc": "Light and twitchy. Great in the curves.",
+	{"id": "hornet", "name": "Hornet 150", "price": 1800, "color": Color(0.80, 0.15, 0.15), "body": 3,
+		"desc": "Light commuter, twitchy and quick in the curves.",
 		"speed": 0.55, "accel": 0.70, "handling": 0.80, "armor": 0.30, "nitro": 0.55, "weight": 0.30},
-	{"id": "viper", "name": "Viper RX", "price": 3200, "color": Color(0.80, 0.10, 0.18), "body": 2,
+	{"id": "viper", "name": "Viper RX", "price": 3200, "color": Color(0.95, 0.80, 0.10), "body": 4,
 		"desc": "Top-speed monster. Fragile if you crash.",
 		"speed": 0.85, "accel": 0.65, "handling": 0.55, "armor": 0.30, "nitro": 0.70, "weight": 0.40},
-	{"id": "boulder", "name": "Boulder 900", "price": 4200, "color": Color(0.25, 0.45, 0.75), "body": 3,
-		"desc": "Heavy tourer. Shrugs off hits, shoves rivals aside.",
+	{"id": "boulder", "name": "Nightbreaker 750", "price": 4200, "color": Color(0.9, 0.42, 0.12), "body": 1,
+		"desc": "Low and heavy night cruiser. Shrugs off hits, shoves rivals aside.",
 		"speed": 0.55, "accel": 0.40, "handling": 0.40, "armor": 0.85, "nitro": 0.45, "weight": 0.90},
-	{"id": "ironclad", "name": "Ironclad", "price": 6500, "color": Color(0.30, 0.70, 0.38), "body": 4,
-		"desc": "Armoured chopper with a big nitro tank.",
+	{"id": "ironclad", "name": "Ironclad X", "price": 6500, "color": Color(0.90, 0.38, 0.05), "body": 2,
+		"desc": "Armoured scrambler with a big nitro tank. Jumps like a goat.",
 		"speed": 0.70, "accel": 0.55, "handling": 0.50, "armor": 0.75, "nitro": 0.90, "weight": 0.75},
 ]
 
