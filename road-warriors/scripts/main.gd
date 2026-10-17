@@ -465,7 +465,14 @@ func show_settings(back: Callable) -> void:
 	var root := VBoxContainer.new()
 	root.add_theme_constant_override("separation", 10)
 	m.add_child(root)
-	root.add_child(_lbl("SETTINGS", 44, ACC))
+	var hdr := HBoxContainer.new()
+	hdr.add_theme_constant_override("separation", 30)
+	hdr.add_child(_btn("< BACK", func() -> void:
+		confirm_reset = false
+		Save.write()
+		settings_back.call(), 200, 26))
+	hdr.add_child(_lbl("SETTINGS", 44, ACC))
+	root.add_child(hdr)
 	var body := HBoxContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 40)
@@ -524,8 +531,10 @@ func show_settings(back: Callable) -> void:
 	right.add_theme_constant_override("separation", 6)
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_child(right)
-	right.add_child(_lbl("CONTROLS  (click a key to remap)", 22, ACC))
-	for a in Save.ACTIONS:
+	var touch := OS.get_name() == "Android" or OS.get_name() == "iOS"
+	if not touch:
+		right.add_child(_lbl("CONTROLS  (click a key to remap)", 22, ACC))
+	for a in ([] if touch else Save.ACTIONS):
 		var name: String = a[0]
 		var row := HBoxContainer.new()
 		var l := _lbl(a[1], 20)
