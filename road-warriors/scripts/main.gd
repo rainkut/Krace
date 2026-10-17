@@ -322,7 +322,9 @@ func show_race_select() -> void:
 	blurb.custom_minimum_size = Vector2(500, 0)
 	dv.add_child(blurb)
 	var theme_names := ["Countryside", "City", "Desert"]
-	dv.add_child(_lbl("Distance   %.1f km      Setting   %s" % [float(rd2["len"]) / 1000.0, theme_names[int(rd2["theme"])]], 20))
+	var wx: String = String(Race.WEATHER.get(rd2["id"], "clear")).capitalize()
+	var tdn: String = String(Race.TOD.get(rd2["id"], "day")).capitalize()
+	dv.add_child(_lbl("Distance   %.1f km      Setting   %s      %s, %s" % [float(rd2["len"]) / 1000.0, theme_names[int(rd2["theme"])], tdn, wx], 20))
 	dv.add_child(_lbl("Rivals   %d      Traffic   %s      Shortcut   %s" % [rd2["rivals"].size(), ["light", "medium", "heavy", "heavy"][clampi(int(float(rd2["traffic"]) * 2.5), 0, 3)], "yes" if rd2["shortcut"] else "no"], 20))
 	dv.add_child(_lbl("Reward   $%d   +%d rep" % [rd2["reward"], rd2["rep"]], 22, GOOD))
 	var dn: Dictionary = Save.d["done"].get(rd2["id"], {})

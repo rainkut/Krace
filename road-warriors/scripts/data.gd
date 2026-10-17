@@ -92,6 +92,18 @@ const RACES := [
 	{"id": "r8", "name": "Marine Drive to Worli", "mode": "race", "len": 12000, "theme": 1, "seed": 91, "req": 280, "route": "mumbai",
 		"rivals": ["speed", "aggressive", "balanced", "heavy", "defensive"], "traffic": 0.9, "reward": 3200, "rep": 90,
 		"blurb": "A real route: Marine Drive, Haji Ali, the Bandra-Worli Sea Link. Mapped from OpenStreetMap.", "shortcut": false, "need_place": 2},
+	{"id": "r9", "name": "Monsoon Ghat", "mode": "race", "len": 11000, "theme": 0, "seed": 103, "req": 320,
+		"rivals": ["aggressive", "speed", "heavy", "balanced", "aggressive"], "traffic": 0.8, "reward": 3600, "rep": 60,
+		"blurb": "Dusk, driving rain, slick hairpins. Brake early or wear the guardrail.", "shortcut": true, "need_place": 2},
+	{"id": "r10", "name": "Rival: Skye Ember", "mode": "rival", "len": 9000, "theme": 1, "seed": 117, "req": 360,
+		"rivals": ["speed"], "traffic": 0.7, "reward": 4200, "rep": 70, "rival_boost": 1.06,
+		"blurb": "Fog on the flyover and the fastest rider in the city on your tail. Win and she respects you.", "shortcut": false, "need_place": 1},
+	{"id": "r11", "name": "Dust Storm Gauntlet", "mode": "highway", "len": 10000, "theme": 2, "seed": 131, "req": 400, "score_goal": 6000, "limit": 160,
+		"rivals": [], "traffic": 1.2, "reward": 4600, "rep": 70,
+		"blurb": "Dense traffic through a dust storm. Six thousand points, no second chances.", "shortcut": false, "need_place": 0},
+	{"id": "r12", "name": "Redline Finale", "mode": "knockout", "len": 14000, "theme": 1, "seed": 149, "req": 450,
+		"rivals": ["aggressive", "speed", "aggressive", "heavy", "balanced", "defensive"], "traffic": 0.9, "reward": 6000, "rep": 100,
+		"blurb": "Night, rain, seven riders. Every 25 seconds the last one is out. Be the last one standing.", "shortcut": true, "need_place": 0}
 ]
 
 static func bike(id: String) -> Dictionary:

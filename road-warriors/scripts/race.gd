@@ -97,8 +97,8 @@ func _exit_tree() -> void:
 	Sfx.tunnel(false)
 
 # ---------------------------------------------------------------- world
-const TOD := {"r2": "night", "r5": "night", "r8": "night", "r6": "dusk"}
-const WEATHER := {"r2": "rain", "r5": "rain", "r4": "fog", "r7": "fog", "r3": "dust"}
+const TOD := {"r2": "night", "r5": "night", "r8": "night", "r6": "dusk", "r9": "dusk", "r12": "night"}
+const WEATHER := {"r2": "rain", "r5": "rain", "r4": "fog", "r7": "fog", "r3": "dust", "r9": "rain", "r10": "fog", "r11": "dust", "r12": "rain"}
 var tod := "day"
 var weather := "clear"
 var env_ref: Environment
