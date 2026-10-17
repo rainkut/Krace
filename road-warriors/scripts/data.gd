@@ -33,7 +33,7 @@ const MAX_UPGRADE := 5
 # reach = lateral reach in metres, cd = cooldown s, dmg = health damage, knock = lateral impulse, slow = speed loss factor
 const WEAPONS := {
 	"punch": {"name": "Punch", "reach": 2.5, "cd": 0.55, "dmg": 9.0, "knock": 7.0, "slow": 0.04, "dur": 0},
-	"kick": {"name": "Kick", "reach": 2.7, "cd": 0.85, "dmg": 12.0, "knock": 12.0, "slow": 0.06, "dur": 0},
+	"kick": {"name": "Kick", "reach": 3.2, "cd": 0.6, "dmg": 14.0, "knock": 14.0, "slow": 0.06, "dur": 0},
 	"bat": {"name": "Bat", "reach": 3.0, "cd": 0.70, "dmg": 18.0, "knock": 11.0, "slow": 0.08, "dur": 8},
 	"chain": {"name": "Chain", "reach": 3.6, "cd": 0.80, "dmg": 16.0, "knock": 9.0, "slow": 0.10, "dur": 8},
 	"pipe": {"name": "Pipe", "reach": 2.9, "cd": 0.95, "dmg": 26.0, "knock": 15.0, "slow": 0.14, "dur": 6},

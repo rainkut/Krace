@@ -683,14 +683,23 @@ func _player_input() -> void:
 	inp["spin"] = Input.get_action_strength("attack") + Input.get_action_strength("atk_r") - Input.get_action_strength("atk_l")
 	if state != RState.RACING or player.airborne:
 		return
+	var dt := get_process_delta_time()
+	buf_punch = maxf(0.0, buf_punch - dt)
+	buf_kick = maxf(0.0, buf_kick - dt)
+	if Input.is_action_just_pressed("attack"):
+		buf_punch = 0.35
+	if Input.is_action_just_pressed("kick"):
+		buf_kick = 0.35
 	if Input.is_action_just_pressed("atk_l"):
 		_melee(player, -1, false)
 	elif Input.is_action_just_pressed("atk_r"):
 		_melee(player, 1, false)
-	elif Input.is_action_just_pressed("attack"):
-		_melee(player, 0, false)
-	elif Input.is_action_just_pressed("kick"):
+	elif buf_kick > 0.0 and player.can_attack():
+		buf_kick = 0.0
 		_melee(player, 0, true)
+	elif buf_punch > 0.0 and player.can_attack():
+		buf_punch = 0.0
+		_melee(player, 0, false)
 
 # ---------------------------------------------------------------- combat
 func _melee(a: Racer, side: int, kick: bool) -> void:
@@ -927,6 +936,8 @@ func _collect(r: Racer, p: Dictionary) -> void:
 var drift_acc := 0.0
 var drift_cash := 0.0
 var air_hint := false
+var buf_punch := 0.0
+var buf_kick := 0.0
 var was_air := false
 
 func _drift_air_rewards(dt: float) -> void:
