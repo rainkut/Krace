@@ -294,6 +294,7 @@ static func _ground_cols(e: int) -> Array:
 	match e:
 		1: return [Color(0.36, 0.36, 0.40), Color(0.33, 0.33, 0.37)]
 		2: return [Color(0.80, 0.66, 0.42), Color(0.76, 0.62, 0.39)]
+		3: return [Color(0.13, 0.15, 0.12), Color(0.10, 0.12, 0.10)]
 		_: return [Color(0.30, 0.47, 0.22), Color(0.27, 0.43, 0.20)]
 
 static func tunnel_f(f: int) -> bool:
@@ -579,6 +580,23 @@ func build_visuals(parent: Node3D) -> void:
 						var base3 := _p(i, rng.randf_range(14.0, 50.0) * side, 0.0)
 						var hh := rng.randf_range(2.5, 5.0)
 						props["cyl"].append(Transform3D(Basis.from_scale(Vector3(0.7, hh, 0.7)), base3 + Vector3(0, hh * 0.5, 0)))
+				elif e2 == 3:
+					var bas5 := Basis.from_euler(Vector3(0, yaw[i], 0))
+					if rng.randf() < 0.5:
+						var tp := _p(i, rng.randf_range(12.0, 60.0) * side, 0.0)
+						var th := rng.randf_range(4.0, 9.0)
+						props["box"].append([Transform3D(bas5.scaled_local(Vector3(0.35, th, 0.35)), tp + Vector3(0, th * 0.5, 0)), Color(0.10, 0.08, 0.07)])
+						for bi2 in 3:
+							var ba := rng.randf_range(0.0, 6.28)
+							var bl := rng.randf_range(1.5, 3.2)
+							props["box"].append([Transform3D(Basis.from_euler(Vector3(rng.randf_range(-0.8, 0.8), ba, rng.randf_range(0.5, 1.1))).scaled_local(Vector3(0.14, bl, 0.14)), tp + Vector3(0, th * rng.randf_range(0.55, 0.95), 0)), Color(0.10, 0.08, 0.07)])
+					if rng.randf() < 0.7:
+						var gp := _p(i, rng.randf_range(8.0, 30.0) * side, 0.0)
+						var gh := rng.randf_range(0.8, 1.5)
+						props["box"].append([Transform3D(Basis.from_euler(Vector3(0, yaw[i] + rng.randf_range(-0.3, 0.3), rng.randf_range(-0.15, 0.15))).scaled_local(Vector3(0.9, gh, 0.22)), gp + Vector3(0, gh * 0.5, 0)), Color(0.38, 0.40, 0.38) * rng.randf_range(0.7, 1.1)])
+					if i % 18 == 0:
+						var fp := _p(i, 9.5 * side, 0.0)
+						props["box"].append([Transform3D(bas5.scaled_local(Vector3(0.12, 2.2, 14.0)), fp + Vector3(0, 1.1, 0)), Color(0.06, 0.06, 0.07)])
 				else:
 					if rng.randf() < 0.55:
 						var xo3: float = rng.randf_range(13.0, 75.0) * side

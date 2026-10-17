@@ -165,7 +165,10 @@ const RACES := [
 		"blurb": "Desert boss with a chain and a grudge. The toughest rider on the map.", "shortcut": true, "need_place": 0},
 	{"id": "r20", "name": "Police Pursuit", "mode": "chase", "len": 11000, "theme": 1, "seed": 293, "req": 0, "survive": 75,
 		"rivals": [], "traffic": 0.5, "reward": 3200, "rep": 50,
-		"blurb": "Sirens behind you and the heat keeps rising. Survive 75 seconds. Cops ram you; kick them off the road for cash.", "shortcut": false, "need_place": 0}
+		"blurb": "Sirens behind you and the heat keeps rising. Survive 75 seconds. Cops ram you; kick them off the road for cash.", "shortcut": false, "need_place": 0},
+	{"id": "r21", "name": "Ghost Rider: Dead Highway", "mode": "race", "len": 9000, "theme": 3, "seed": 313, "req": 0, "zombie": true, "tod": "night", "weather": "fog",
+		"rivals": ["aggressive", "speed"], "traffic": 1.0, "reward": 4800, "rep": 60,
+		"blurb": "The dead walk the highway tonight. You are the Ghost Rider: flaming skull, burning wheels. Run them down for cash, but the brutes hit back.", "shortcut": false, "need_place": 0}
 ]
 
 static func bike(id: String) -> Dictionary:

@@ -11,12 +11,17 @@ const KINDS := {
 	"auto": {"len": 2.6, "wid": 1.4, "spd": [12.0, 18.0], "w": 10},
 	"bike": {"len": 2.0, "wid": 0.8, "spd": [26.0, 36.0], "w": 8},
 	"cop": {"len": 4.5, "wid": 1.9, "spd": [28.0, 36.0], "w": 0},
+	"zombie": {"len": 1.0, "wid": 0.9, "spd": [1.2, 3.2], "w": 0},
+	"brute": {"len": 1.6, "wid": 1.5, "spd": [1.6, 3.6], "w": 0},
 }
 const PALETTE := [Color(0.8, 0.15, 0.15), Color(0.15, 0.35, 0.75), Color(0.85, 0.85, 0.85), Color(0.2, 0.2, 0.22), Color(0.85, 0.7, 0.15),
 	Color(0.2, 0.55, 0.3), Color(0.6, 0.6, 0.65), Color(0.9, 0.5, 0.15)]
 
 var kind := "car"
 static var night := false
+static var zombie := false
+var _limbs: Array[Node3D] = []
+var _t := 0.0
 var _brakes: Array[StandardMaterial3D] = []
 var _glows: Array[MeshInstance3D] = []
 var _braking := false
@@ -39,6 +44,8 @@ var _lr: StandardMaterial3D
 var _lb: StandardMaterial3D
 
 static func pick_kind(rng: RandomNumberGenerator) -> String:
+	if zombie:
+		return "brute" if rng.randf() < 0.14 else "zombie"
 	var total := 0
 	for k in KINDS:
 		total += int(KINDS[k]["w"])
@@ -58,6 +65,14 @@ func build(k: String, rng: RandomNumberGenerator) -> void:
 	for c in get_children():
 		c.queue_free()
 	_glows.clear()
+	_limbs.clear()
+	if k == "zombie" or k == "brute":
+		_build_zombie(k == "brute", rng)
+		var spz: Array = d["spd"]
+		base_v = rng.randf_range(spz[0], spz[1])
+		v = base_v
+		weave_ph = rng.randf() * 6.28
+		return
 	var L: float = d["len"]
 	var W: float = d["wid"]
 	var glass := Color(0.08, 0.1, 0.14)
@@ -176,6 +191,56 @@ func build(k: String, rng: RandomNumberGenerator) -> void:
 	v = base_v
 	weave_ph = rng.randf() * 6.28
 
+func is_zombie() -> bool:
+	return kind == "zombie" or kind == "brute"
+
+func _build_zombie(brute: bool, rng: RandomNumberGenerator) -> void:
+	var k := 1.55 if brute else 1.0
+	var skin := Color(0.42, 0.55, 0.36).lerp(Color(0.55, 0.6, 0.45), rng.randf())
+	if brute:
+		skin = Color(0.5, 0.35, 0.38)
+	var cloth := Color(0.2, 0.18, 0.16).lerp(Color(0.3, 0.12, 0.1), rng.randf())
+	_box(Vector3(0.5, 0.75, 0.26) * k, Vector3(0, 1.1 * k, 0), cloth)
+	var head := _box(Vector3(0.28, 0.3, 0.28) * k, Vector3(0, 1.65 * k, -0.04), skin)
+	for ex in [-0.07, 0.07]:
+		var e := _box(Vector3(0.06, 0.06, 0.04) * k, Vector3(ex * k, 1.68 * k, -0.2 * k), Color(1, 0.9, 0.2))
+		var em := StandardMaterial3D.new()
+		em.albedo_color = Color(1, 0.8, 0.1)
+		em.emission_enabled = true
+		em.emission = Color(1, 0.7, 0.1)
+		em.emission_energy_multiplier = 3.0
+		e.material_override = em
+	head.rotation.z = rng.randf_range(-0.25, 0.25)
+	for sx in [-1.0, 1.0]:
+		var leg := Node3D.new()
+		leg.position = Vector3(sx * 0.13 * k, 0.72 * k, 0)
+		add_child(leg)
+		var lb := _box(Vector3(0.16, 0.72, 0.18) * k, Vector3(0, -0.36 * k, 0), Color(0.14, 0.14, 0.18))
+		lb.get_parent().remove_child(lb)
+		leg.add_child(lb)
+		_limbs.append(leg)
+	for sx in [-1.0, 1.0]:
+		var arm := Node3D.new()
+		arm.position = Vector3(sx * 0.33 * k, 1.42 * k, 0)
+		add_child(arm)
+		var ab := _box(Vector3(0.13, 0.62, 0.13) * k, Vector3(0, -0.28 * k, -0.0), skin)
+		ab.get_parent().remove_child(ab)
+		arm.add_child(ab)
+		arm.rotation.x = -1.35
+		_limbs.append(arm)
+	var sh := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(1.0, 1.0) * k
+	sh.mesh = qm
+	var sm := StandardMaterial3D.new()
+	sm.albedo_color = Color(0, 0, 0, 0.35)
+	sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	sh.material_override = sm
+	sh.rotation.x = -PI / 2
+	sh.position.y = 0.04
+	add_child(sh)
+
 func _light(c: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = c
@@ -203,6 +268,16 @@ func _box(size: Vector3, p: Vector3, c: Color) -> MeshInstance3D:
 	return mi
 
 func step(dt: float, others: Array) -> void:
+	if _limbs.size() == 4:
+		_t += dt * (4.0 + v * 0.8)
+		var sw := sin(_t + weave_ph) * 0.7
+		_limbs[0].rotation.x = sw
+		_limbs[1].rotation.x = -sw
+		_limbs[2].rotation.x = -1.35 + sin(_t * 0.5) * 0.15
+		_limbs[3].rotation.x = -1.35 - sin(_t * 0.5) * 0.15
+		s += v * dt
+		x = lane_x + sin(weave_ph + _t * 0.15) * 0.5
+		return
 	var tv := base_v
 	for o in others:
 		if o == self:

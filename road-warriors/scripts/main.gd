@@ -295,7 +295,7 @@ func show_daily() -> void:
 	v.add_child(_lbl("DAILY CHALLENGE", 44, ACC, HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_lbl("%d-%02d-%02d" % [key / 10000, (key / 100) % 100, key % 100], 22, DIM, HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(_lbl(Data.MODES[dr["mode"]], 26, TEXT, HORIZONTAL_ALIGNMENT_CENTER))
-	var theme_names := ["Countryside", "City", "Desert"]
+	var theme_names := ["Countryside", "City", "Desert", "Graveyard"]
 	v.add_child(_lbl("%.1f km   %s   %s, %s   Rivals %d" % [float(dr["len"]) / 1000.0, theme_names[int(dr["theme"])], String(dr["tod"]).capitalize(), String(dr["weather"]).capitalize(), dr["rivals"].size()], 20, TEXT, HORIZONTAL_ALIGNMENT_CENTER))
 	var claimed := int(dd.get("claimed", 0)) == key
 	v.add_child(_lbl("Reward  $%d   (once a day)" % int(dr["reward"]) if not claimed else "Today's reward claimed - come back tomorrow", 24, GOOD if not claimed else DIM, HORIZONTAL_ALIGNMENT_CENTER))
@@ -338,7 +338,7 @@ func show_race_select() -> void:
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 24)
 	root.add_child(body)
-	var sc := ScrollContainer.new()
+	var sc := SmoothScroll.new()
 	sc.custom_minimum_size = Vector2(560, 0)
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	body.add_child(sc)
@@ -371,7 +371,7 @@ func show_race_select() -> void:
 	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	blurb.custom_minimum_size = Vector2(500, 0)
 	dv.add_child(blurb)
-	var theme_names := ["Countryside", "City", "Desert"]
+	var theme_names := ["Countryside", "City", "Desert", "Graveyard"]
 	var wx: String = String(Race.WEATHER.get(rd2["id"], "clear")).capitalize()
 	var tdn: String = String(Race.TOD.get(rd2["id"], "day")).capitalize()
 	dv.add_child(_lbl("Distance   %.1f km      Setting   %s      %s, %s" % [float(rd2["len"]) / 1000.0, theme_names[int(rd2["theme"])], tdn, wx], 20))
@@ -578,7 +578,7 @@ func show_settings(back: Callable) -> void:
 		settings_back.call(), 200, 26))
 	hdr.add_child(_lbl("SETTINGS", 44, ACC))
 	root.add_child(hdr)
-	var scr := ScrollContainer.new()
+	var scr := SmoothScroll.new()
 	scr.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scr.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	root.add_child(scr)

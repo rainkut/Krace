@@ -55,7 +55,7 @@ var target_rival: Racer = null
 var shortcut_taken := false
 var was_in_shortcut := false
 
-var st := {"overtakes": 0, "near": 0, "takedowns": 0, "crashes": 0, "top": 0.0, "cash": 0, "hits": 0, "wrecked": 0, "cops": 0, "rams": 0, "combo": 1}
+var st := {"overtakes": 0, "near": 0, "takedowns": 0, "crashes": 0, "top": 0.0, "cash": 0, "hits": 0, "zombies": 0, "wrecked": 0, "cops": 0, "rams": 0, "combo": 1}
 
 var kicktest := false
 var kt_done := false
@@ -134,11 +134,11 @@ func _build_world() -> void:
 	var theme := int(def.get("theme", 0))
 	tod = str(def.get("tod", TOD.get(str(def.get("id", "")), "day")))
 	weather = str(def.get("weather", WEATHER.get(str(def.get("id", "")), "clear")))
-	var top := [Color(0.25, 0.48, 0.85), Color(0.12, 0.08, 0.28), Color(0.30, 0.42, 0.70)][theme] as Color
-	var hor := [Color(0.72, 0.84, 0.96), Color(0.62, 0.36, 0.52), Color(0.98, 0.76, 0.50)][theme] as Color
-	var amb := [Color(0.62, 0.66, 0.72), Color(0.55, 0.48, 0.62), Color(0.78, 0.68, 0.58)][theme] as Color
-	var sun_e := [1.15, 0.8, 1.3][theme] as float
-	var sun_c := [Color(1, 0.97, 0.9), Color(1.0, 0.7, 0.55), Color(1, 0.9, 0.75)][theme] as Color
+	var top := [Color(0.25, 0.48, 0.85), Color(0.12, 0.08, 0.28), Color(0.30, 0.42, 0.70), Color(0.05, 0.02, 0.06)][theme] as Color
+	var hor := [Color(0.72, 0.84, 0.96), Color(0.62, 0.36, 0.52), Color(0.98, 0.76, 0.50), Color(0.35, 0.10, 0.08)][theme] as Color
+	var amb := [Color(0.62, 0.66, 0.72), Color(0.55, 0.48, 0.62), Color(0.78, 0.68, 0.58), Color(0.34, 0.28, 0.36)][theme] as Color
+	var sun_e := [1.15, 0.8, 1.3, 0.3][theme] as float
+	var sun_c := [Color(1, 0.97, 0.9), Color(1.0, 0.7, 0.55), Color(1, 0.9, 0.75), Color(0.9, 0.2, 0.15)][theme] as Color
 	var fogd := 0.0018
 	if tod == "dusk":
 		top = Color(0.20, 0.16, 0.42); hor = Color(1.0, 0.52, 0.30); amb = Color(0.62, 0.48, 0.50); sun_e = 0.7; sun_c = Color(1.0, 0.55, 0.35)
@@ -150,6 +150,8 @@ func _build_world() -> void:
 		top = top.lerp(Color(0.66, 0.68, 0.72), 0.7); hor = hor.lerp(Color(0.72, 0.74, 0.78), 0.85); sun_e *= 0.6; fogd = 0.0085
 	elif weather == "dust":
 		hor = hor.lerp(Color(0.86, 0.66, 0.42), 0.5); fogd = 0.0034
+	if theme == 3:
+		top = Color(0.03, 0.01, 0.05); hor = Color(0.14, 0.04, 0.05); amb = Color(0.30, 0.25, 0.36); sun_e = 0.35; sun_c = Color(0.95, 0.2, 0.15); fogd = 0.007
 	var psm := ProceduralSkyMaterial.new()
 	psm.sky_top_color = top
 	psm.sky_horizon_color = hor
@@ -194,6 +196,7 @@ func _build_world() -> void:
 		_build_reflection()
 	track.night = tod == "night"
 	TrafficCar.night = tod == "night"
+	TrafficCar.zombie = bool(def.get("zombie", false))
 	track.build_visuals(self)
 	if tod != "day" or weather == "rain" or weather == "fog":
 		_build_lamps()
@@ -350,7 +353,7 @@ void fragment() {
 	cr.material = blur_mat
 	cl.add_child(cr)
 	var st := CPUParticles3D.new()
-	st.amount = 40
+	st.amount = 14
 	st.lifetime = 0.35
 	st.local_coords = false
 	st.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
@@ -365,7 +368,7 @@ void fragment() {
 	bm.size = Vector3(0.015, 0.015, 2.4)
 	var mm := StandardMaterial3D.new()
 	mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mm.albedo_color = Color(1, 1, 1, 0.22)
+	mm.albedo_color = Color(1, 1, 1, 0.12)
 	mm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	bm.material = mm
 	st.mesh = bm
@@ -419,7 +422,7 @@ func _update_fx(dt: float) -> void:
 		blur_mat.set_shader_parameter("amt", blur_amt * (0.5 if Save.setting("shake") == 0 else 1.0))
 		blur_mat.set_shader_parameter("ca", 0.025 if player.nitro_on else 0.0)
 	if streaks != null:
-		streaks.emitting = v01 > 0.4
+		streaks.emitting = player.nitro_on
 
 func _update_atmosphere(dt: float) -> void:
 	_update_fx(dt)
@@ -455,6 +458,8 @@ func _build_riders() -> void:
 	player.setup({"name": "You", "player": true, "arch": "balanced", "color": b["color"], "body": b["body"],
 		"stats": Data.stats(bid, Save.bike_upg(bid))})
 	add_child(player)
+	if bool(def.get("zombie", false)):
+		player.flame_skull()
 	var cu: Dictionary = Save.d["custom"].get(bid, {})
 	if not cu.is_empty():
 		var pi := int(cu.get("paint", -1))
@@ -634,6 +639,7 @@ func _try_spawn(s_lo: float, s_hi: float) -> bool:
 	car.base_v = rng.randf_range(float(K["spd"][0]), float(K["spd"][1]))
 	car.v = car.base_v
 	car.passed_flag = false
+	car.hp = 40.0
 	car.prev_ds = sp - player.s
 	traffic.append(car)
 	return true
@@ -650,7 +656,7 @@ func _update_traffic(dt: float) -> void:
 	var i := traffic.size() - 1
 	while i >= 0:
 		var c := traffic[i]
-		if c.s < lo or c.s > hi + 120.0:
+		if c.s < lo or c.s > hi + 120.0 or c.hp < 0.0:
 			_release_car(c)
 			traffic.remove_at(i)
 		i -= 1
@@ -1005,6 +1011,46 @@ func _collide_riders() -> void:
 						Sfx.play("bump", 0.6)
 						shake = maxf(shake, 0.2)
 
+func _splat(r: Racer, c: TrafficCar) -> void:
+	var brute := c.kind == "brute"
+	c.hp = -1.0
+	var p := CPUParticles3D.new()
+	p.amount = 26
+	p.lifetime = 0.7
+	p.one_shot = true
+	p.explosiveness = 1.0
+	p.direction = Vector3(0, 1, 0)
+	p.spread = 70.0
+	p.initial_velocity_min = 3.0
+	p.initial_velocity_max = 8.0
+	p.gravity = Vector3(0, -14, 0)
+	var sm := SphereMesh.new()
+	sm.radius = 0.09
+	sm.height = 0.18
+	sm.radial_segments = 5
+	sm.rings = 3
+	var bm := StandardMaterial3D.new()
+	bm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bm.albedo_color = Color(0.55, 0.02, 0.03) if randf() < 0.7 else Color(0.25, 0.4, 0.12)
+	sm.material = bm
+	p.mesh = sm
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(p)
+	p.global_position = c.global_position + Vector3(0, 0.9, 0)
+	p.emitting = true
+	get_tree().create_timer(1.2).timeout.connect(p.queue_free)
+	r.v *= 0.9 if brute else 0.985
+	if brute and not (god and r.is_player):
+		r.damage(4.0)
+	if r.is_player:
+		st["zombies"] += 1
+		shake = maxf(shake, 0.3 if brute else 0.15)
+		Sfx.play("crunch", 0.55, 1.2)
+		if int(st["zombies"]) % 5 == 0:
+			toast.emit("%d ZOMBIES SMASHED" % int(st["zombies"]), 1)
+		else:
+			toast.emit("BRUTE SPLAT" if brute else "SPLAT", 1)
+
 func _collide_traffic() -> void:
 	for r in racers:
 		if r.eliminated or r.crash_t > 0.0 or (r.airborne and r.air_y > 0.8):
@@ -1019,6 +1065,9 @@ func _collide_traffic() -> void:
 				continue
 			c.passed_flag = true
 			if r.invuln > 0.0:
+				continue
+			if c.is_zombie():
+				_splat(r, c)
 				continue
 			var rel := r.v - c.v
 			var behind := ds > 0.0
@@ -1336,7 +1385,7 @@ func _end(win: bool, reason: String, game_over: bool) -> void:
 	var daily_done: bool = bool(def.get("daily", false)) and int(Save.d["daily"].get("claimed", 0)) == int(def.get("date", 0))
 	if daily_done:
 		mult *= 0.15
-	var bonus := int(st["cash"]) + int(st["takedowns"]) * 80 + int(st["near"]) * 15 + int(st["overtakes"]) * 40 + int(st["cops"]) * 60 + (int(st["combo"]) - 1) * 25
+	var bonus := int(st["cash"]) + int(st["takedowns"]) * 80 + int(st["near"]) * 15 + int(st["overtakes"]) * 40 + int(st["cops"]) * 60 + int(st["zombies"]) * 12 + (int(st["combo"]) - 1) * 25
 	var money := int(base * mult) + bonus
 	var first_clear: bool = not Save.d["done"].has(def["id"])
 	var rep := 0

@@ -186,6 +186,48 @@ func _box(parent: Node3D, size: Vector3, pos: Vector3, c: Color, rough := 0.6, m
 	parent.add_child(mi)
 	return mi
 
+func flame_skull() -> void:
+	head_mat.albedo_color = Color(0.9, 0.88, 0.8)
+	head_mat.emission_enabled = true
+	head_mat.emission = Color(1.0, 0.35, 0.05)
+	head_mat.emission_energy_multiplier = 1.6
+	var parent: Node3D = torso if torso != null else self
+	var base := Vector3(0, 0.78, -0.02)
+	for ex in [-0.07, 0.07]:
+		var eye := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.07, 0.08, 0.05)
+		eye.mesh = bm
+		var em := StandardMaterial3D.new()
+		em.albedo_color = Color(0.02, 0.0, 0.0)
+		eye.material_override = em
+		eye.position = base + Vector3(ex, 0.02, -0.18)
+		parent.add_child(eye)
+	var jaw := MeshInstance3D.new()
+	var jb := BoxMesh.new()
+	jb.size = Vector3(0.14, 0.04, 0.05)
+	jaw.mesh = jb
+	var jm := StandardMaterial3D.new()
+	jm.albedo_color = Color(0.02, 0.0, 0.0)
+	jaw.material_override = jm
+	jaw.position = base + Vector3(0, -0.09, -0.18)
+	parent.add_child(jaw)
+	var hg := _glow(Color(1.0, 0.45, 0.05, 0.9), 1.3, base + Vector3(0, 0.12, 0))
+	hg.reparent(parent, false)
+	hg.position = base + Vector3(0, 0.12, 0)
+	var f := _mk_particles(30, 0.3, Color(1.0, 0.5, 0.05, 0.8), 0.05, Vector2(0.5, 1.2), Vector3(0, 2.0, 0))
+	f.direction = Vector3(0, 1, 0)
+	f.spread = 22.0
+	f.reparent(parent, false)
+	f.position = base + Vector3(0, 0.15, 0)
+	f.emitting = true
+	for w in [wheel_f, wheel_r]:
+		if w != null:
+			var wp: Node3D = w
+			var wg := _glow(Color(1.0, 0.4, 0.05, 0.55), 0.9, Vector3.ZERO)
+			wg.reparent(wp, false)
+			wg.position = Vector3.ZERO
+
 func _mk_particles(amount: int, life: float, col: Color, size: float, vel: Vector2, grav: Vector3, unshaded := true) -> CPUParticles3D:
 	var p := CPUParticles3D.new()
 	p.amount = amount
