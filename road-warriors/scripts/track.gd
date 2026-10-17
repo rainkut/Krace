@@ -10,6 +10,8 @@ const DIRT_OUT := 15.0
 const F_BRIDGE := 1
 const F_TUNNEL := 2
 const F_INTER := 4
+const F_RAMP := 8
+const RAMP_H := 2.6
 const CHUNK := 100  # samples per visual chunk (400 m)
 
 var def: Dictionary = {}
@@ -28,6 +30,7 @@ var shortcut_gain := 1.4
 var checkpoints: Array = []
 var chunks: Array = []   # [Node3D, s0, s1]
 var inters: Array = []
+var ramps: Array = []   # Vector2(start s, end s)
 var wet := false
 var night := false
 var refl: Texture2D
@@ -61,7 +64,11 @@ static func generate(d: Dictionary) -> Array:
 			e = 0
 		var r := rng.randf()
 		var s_list: Array = []
-		if r < 0.2:
+		if d.get("stunt", false) and rng.randf() < 0.5:
+			s_list.append(seg(rng.randf_range(160, 240), 0, 0, 0, e))
+			s_list.append(seg(24, 0, 0, F_RAMP, e))
+			s_list.append(seg(rng.randf_range(100, 140), 0, 0, 0, e))
+		elif r < 0.2:
 			s_list.append(seg(rng.randf_range(250, 500), 0, 0, 0, e))
 		elif r < 0.52:
 			var c := rng.randf_range(0.0016, 0.0034) * (1.0 if rng.randf() < 0.5 else -1.0)
@@ -192,6 +199,13 @@ func build(d: Dictionary) -> void:
 			if run_start >= 0 and (i - run_start) * STEP >= 340.0:
 				shortcut = Vector2(float(run_start + 12) * STEP, float(i) * STEP)
 				break
+	ramps = []
+	for i in range(1, n - 1):
+		if feat[i] & F_RAMP and not (feat[i - 1] & F_RAMP):
+			var j := i
+			while j < n - 1 and (feat[j] & F_RAMP):
+				j += 1
+			ramps.append(Vector2(float(i) * STEP, float(j) * STEP))
 	inters = []
 	for i in range(1, n - 1):
 		if feat[i] & F_INTER and not (feat[i - 1] & F_INTER):
@@ -219,6 +233,14 @@ func curve_at(s: float) -> float:
 
 func slope_at(s: float) -> float:
 	return slope[int(_uv(s).x)]
+
+func ramp_h(s: float) -> float:
+	for r in ramps:
+		if s >= r.x and s < r.y:
+			return RAMP_H * (s - r.x) / (r.y - r.x)
+		if s < r.x:
+			break
+	return 0.0
 
 func feat_at(s: float) -> int:
 	return feat[int(_uv(s).x)]
@@ -466,6 +488,17 @@ func build_visuals(parent: Node3D) -> void:
 					for sx in [-1.0, 1.0]:
 						var pp := _p(i, 5.0 * sx, -9.0 + _ground_dy(i) * 0.0)
 						props["box"].append([Transform3D(Basis.from_scale(Vector3(1.8, 16.0, 1.8)), pp + Vector3(0, -8.0, 0)), Color(0.55, 0.55, 0.58)])
+		for rp in ramps:
+			var r0 := int(rp.x / STEP)
+			var r1 := int(rp.y / STEP)
+			if r0 >= c0 and r0 < c1:
+				var cnt := r1 - r0
+				for k in cnt:
+					var ha := RAMP_H * float(k) / cnt
+					var hb := RAMP_H * float(k + 1) / cnt
+					var rcol := Color(1.0, 0.55, 0.1) if k % 2 == 0 else Color(1.0, 0.85, 0.15)
+					_quad(st, _p(r0 + k, -7.6, ha + 0.04), _p(r0 + k, 7.6, ha + 0.04), _p(r0 + k + 1, 7.6, hb + 0.04), _p(r0 + k + 1, -7.6, hb + 0.04), rcol, Vector3.UP)
+				_quad(st, _p(r1, -7.6, 0.0), _p(r1, 7.6, 0.0), _p(r1, 7.6, RAMP_H), _p(r1, -7.6, RAMP_H), Color(0.25, 0.25, 0.3), Vector3.UP)
 		# intersections handled per chunk
 		for ic in inters:
 			var ii := int(ic / STEP)

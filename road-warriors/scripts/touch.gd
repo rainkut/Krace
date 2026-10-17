@@ -16,9 +16,8 @@ func _ready() -> void:
 		{"n": ">", "a": "right", "c": Vector2(300, 600), "r": 82, "col": Color(1, 1, 1), "g": 1},
 		{"n": "BRAKE", "a": "brake", "c": Vector2(210, 440), "r": 56, "col": Color(0.9, 0.3, 0.3), "g": 0},
 		{"n": "NITRO", "a": "nitro", "c": Vector2(1150, 600), "r": 78, "col": Color(0.3, 0.8, 1.0), "g": 0},
-		{"n": "HIT L", "a": "atk_l", "c": Vector2(900, 620), "r": 62, "col": Color(1.0, 0.55, 0.12), "g": 0},
-		{"n": "HIT R", "a": "atk_r", "c": Vector2(1030, 480), "r": 62, "col": Color(1.0, 0.55, 0.12), "g": 0},
-		{"n": "KICK", "a": "kick", "c": Vector2(1170, 430), "r": 48, "col": Color(0.95, 0.8, 0.2), "g": 0},
+		{"n": "PUNCH", "a": "attack", "c": Vector2(940, 600), "r": 72, "col": Color(1.0, 0.55, 0.12), "g": 0},
+		{"n": "KICK", "a": "kick", "c": Vector2(1050, 440), "r": 60, "col": Color(0.95, 0.8, 0.2), "g": 0},
 	]
 
 func _pos(b: Dictionary) -> Vector2:

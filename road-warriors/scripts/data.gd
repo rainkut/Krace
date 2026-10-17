@@ -103,7 +103,19 @@ const RACES := [
 		"blurb": "Dense traffic through a dust storm. Six thousand points, no second chances.", "shortcut": false, "need_place": 0},
 	{"id": "r12", "name": "Redline Finale", "mode": "knockout", "len": 14000, "theme": 1, "seed": 149, "req": 450,
 		"rivals": ["aggressive", "speed", "aggressive", "heavy", "balanced", "defensive"], "traffic": 0.9, "reward": 6000, "rep": 100,
-		"blurb": "Night, rain, seven riders. Every 25 seconds the last one is out. Be the last one standing.", "shortcut": true, "need_place": 0}
+		"blurb": "Night, rain, seven riders. Every 25 seconds the last one is out. Be the last one standing.", "shortcut": true, "need_place": 0},
+	{"id": "r13", "name": "Skyline Stunt Park", "mode": "race", "len": 7000, "theme": 1, "seed": 211, "req": 0, "stunt": true,
+		"rivals": ["speed", "balanced", "aggressive"], "traffic": 0.25, "reward": 2500, "rep": 40,
+		"blurb": "Orange ramps every few hundred metres. Hit them fast, KICK to flip, PUNCH to spin, land clean for cash and nitro.", "shortcut": false, "need_place": 0},
+	{"id": "r14", "name": "Canyon Sky Jumps", "mode": "time", "len": 6500, "theme": 2, "seed": 223, "req": 0, "stunt": true, "target": 140,
+		"rivals": [], "traffic": 0.0, "reward": 2800, "rep": 40,
+		"blurb": "No traffic, no rivals, just ramps and the clock. Stack tricks and keep the nitro burning.", "shortcut": false, "need_place": 0},
+	{"id": "r15", "name": "Midnight Trick Run", "mode": "highway", "len": 7500, "theme": 1, "seed": 239, "req": 0, "stunt": true, "score_goal": 5000, "limit": 150,
+		"rivals": [], "traffic": 0.6, "reward": 3200, "rep": 50,
+		"blurb": "Night jumps over city traffic. Drifts, near misses and big air all feed the score.", "shortcut": false, "need_place": 0},
+	{"id": "r16", "name": "Pink City Sunset Cruise", "mode": "time", "len": 10900, "theme": 1, "seed": 251, "req": 0, "route": "jaipur", "cruise": 15.0, "target": 900,
+		"rivals": [], "traffic": 0.12, "reward": 1500, "rep": 20,
+		"blurb": "A slow golden-hour ride on the real roads from Hawa Mahal past Jal Mahal to Amber. Speed capped, no rivals. Just look around.", "shortcut": false, "need_place": 0}
 ]
 
 static func bike(id: String) -> Dictionary:
@@ -128,6 +140,6 @@ static func stats(bike_id: String, upg: Dictionary) -> Dictionary:
 		"vmax": 44.0 + 22.0 * spd, "acc": 9.0 + 9.0 * acc, "brake": 30.0 + 10.0 * (0.4 + lv.call("brakes") * 1.5),
 		"grip": 26.0 + 20.0 * hnd, "dirt": 0.55 + 0.35 * lv.call("tires") + 0.2 * hnd,
 		"dmg_mult": 1.35 - 0.6 * arm, "health": 90.0 + 40.0 * arm, "mass": 0.7 + 0.8 * b["weight"],
-		"nitro_cap": 70.0 + 50.0 * nit, "nitro_regen": 1.0 + 2.5 * nit,
+		"nitro_cap": 120.0 + 80.0 * nit, "nitro_regen": 4.0 + 6.0 * nit,
 		"bars": {"Speed": spd, "Accel": acc, "Handling": hnd, "Armor": arm, "Nitro": nit, "Weight": b["weight"]},
 	}

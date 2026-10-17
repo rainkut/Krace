@@ -87,7 +87,7 @@ func setup(race_def: Dictionary) -> void:
 	_update_camera(0.1, true)
 	_build_weather()
 	_build_fx()
-	Sfx.music(true, "music_night" if tod == "night" else "music")
+	Sfx.music(true, "music_cruise" if def.has("cruise") else ("music_night" if tod == "night" else "music"))
 	Sfx.rain(weather == "rain")
 
 func _exit_tree() -> void:
@@ -97,7 +97,7 @@ func _exit_tree() -> void:
 	Sfx.tunnel(false)
 
 # ---------------------------------------------------------------- world
-const TOD := {"r2": "night", "r5": "night", "r8": "night", "r6": "dusk", "r9": "dusk", "r12": "night"}
+const TOD := {"r2": "night", "r5": "night", "r8": "night", "r6": "dusk", "r9": "dusk", "r12": "night", "r16": "dusk"}
 const WEATHER := {"r2": "rain", "r5": "rain", "r4": "fog", "r7": "fog", "r3": "dust", "r9": "rain", "r10": "fog", "r11": "dust", "r12": "rain"}
 var tod := "day"
 var weather := "clear"
@@ -431,6 +431,7 @@ func _build_riders() -> void:
 	var bid: String = Save.d["bike"]
 	var b := Data.bike(bid)
 	player = Racer.new()
+	player.speed_cap = float(def.get("cruise", 0.0))
 	player.setup({"name": "You", "player": true, "arch": "balanced", "color": b["color"], "body": b["body"],
 		"stats": Data.stats(bid, Save.bike_upg(bid))})
 	add_child(player)
@@ -678,7 +679,9 @@ func _player_input() -> void:
 	else:
 		inp["throttle"] = Input.get_action_strength("accel")
 	inp["nitro"] = Input.is_action_pressed("nitro")
-	if state != RState.RACING:
+	inp["flip"] = Input.is_action_pressed("kick")
+	inp["spin"] = Input.get_action_strength("attack") + Input.get_action_strength("atk_r") - Input.get_action_strength("atk_l")
+	if state != RState.RACING or player.airborne:
 		return
 	if Input.is_action_just_pressed("atk_l"):
 		_melee(player, -1, false)
@@ -792,6 +795,7 @@ func _on_racer_event(kind: String, data: Dictionary, r: Racer) -> void:
 				shake = 1.0
 				combo = 1
 				Sfx.play("crash")
+				Sfx.play("impact", 0.9)
 				toast.emit("WIPEOUT", 2)
 		"weapon_broke":
 			if r == player:
@@ -800,7 +804,7 @@ func _on_racer_event(kind: String, data: Dictionary, r: Racer) -> void:
 func _collide_riders() -> void:
 	for i in racers.size():
 		var a := racers[i]
-		if a.eliminated or a.crash_t > 0.0:
+		if a.eliminated or a.crash_t > 0.0 or a.airborne:
 			continue
 		for j in range(i + 1, racers.size()):
 			var b := racers[j]
@@ -831,7 +835,7 @@ func _collide_riders() -> void:
 
 func _collide_traffic() -> void:
 	for r in racers:
-		if r.eliminated or r.crash_t > 0.0:
+		if r.eliminated or r.crash_t > 0.0 or (r.airborne and r.air_y > 0.8):
 			continue
 		for c in traffic:
 			var ds := c.s - r.s
@@ -920,7 +924,55 @@ func _collect(r: Racer, p: Dictionary) -> void:
 		toast.emit({"nitro": "NITRO +", "repair": "REPAIR +", "cash": "CASH +60", "bat": "BAT", "chain": "CHAIN", "pipe": "PIPE"}[k], 1)
 
 # ---------------------------------------------------------------- rewards
+var drift_acc := 0.0
+var drift_cash := 0.0
+var air_hint := false
+var was_air := false
+
+func _drift_air_rewards(dt: float) -> void:
+	if player.drift_t > 0.5 and player.crash_t <= 0.0:
+		if drift_acc <= 0.0:
+			toast.emit("DRIFT!", 1)
+			Sfx.play("screech", 0.7)
+		elif fmod(drift_acc, 0.6) > 0.6 - dt:
+			Sfx.play("screech", 0.5, randf_range(0.95, 1.1))
+		drift_acc += dt
+		var rate := 1.0 + minf(drift_acc, 5.0) * 0.4
+		drift_cash += 14.0 * rate * dt
+		score += 160.0 * rate * dt
+		player.nitro = minf(float(player.stats["nitro_cap"]), player.nitro + 16.0 * dt)
+	elif drift_acc > 0.0 and player.drift_t <= 0.0:
+		if drift_acc > 1.2:
+			toast.emit("DRIFT +$%d" % int(drift_cash), 1)
+		st["cash"] += int(drift_cash)
+		drift_acc = 0.0
+		drift_cash = 0.0
+	if player.airborne and not air_hint and not autopilot:
+		air_hint = true
+		toast.emit("AIR! KICK = FLIP   PUNCH = SPIN", 1)
+	if player.airborne and not was_air:
+		Sfx.play("whoosh", 0.9)
+	was_air = player.airborne
+	if not player.land_evt.is_empty():
+		var le: Dictionary = player.land_evt
+		player.land_evt = {}
+		var tr := int(le["tricks"])
+		Sfx.play("thud", 1.0)
+		if bool(le["attempt"]) and not bool(le["clean"]):
+			player.v *= 0.55
+			player.hit_flash = 0.3
+			shake = maxf(shake, 0.6)
+			toast.emit("SKETCHY LANDING", 2)
+		else:
+			var cash := int(float(le["air"]) * 30.0) + tr * 150
+			st["cash"] += cash
+			score += float(cash) * 4.0
+			player.nitro = minf(float(player.stats["nitro_cap"]), player.nitro + 10.0 + tr * 25.0)
+			Sfx.play("stinger" if tr > 0 else "overtake", 0.9)
+			toast.emit(("%dx TRICK  +$%d" % [tr, cash]) if tr > 0 else "AIR TIME  +$%d" % cash, 1)
+
 func _rewards(dt: float) -> void:
+	_drift_air_rewards(dt)
 	combo_t = maxf(0.0, combo_t - dt)
 	if combo_t <= 0.0 and combo > 1:
 		combo = 1

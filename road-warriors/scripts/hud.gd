@@ -173,7 +173,7 @@ func _draw() -> void:
 		_txt("GO!", Vector2(W * 0.5, H * 0.45), 150, accent, HORIZONTAL_ALIGNMENT_CENTER, 400)
 	# hints
 	if Save.setting("tutorial") and hint_t > 0.0 and race.state != Race.RState.GAME_OVER:
-		var hint := "Drag the pads to steer, punch with the side buttons, tap NITRO" if touch_mode else "W/S gas+brake   A/D steer   SPACE punch   Q/R left-right   E kick   SHIFT nitro   ESC pause"
+		var hint := "Drag the pads to steer, PUNCH / KICK to fight (in the air: flip and spin), tap NITRO" if touch_mode else "W/S gas+brake   A/D steer   SPACE punch   Q/R left-right   E kick   SHIFT nitro   ESC pause"
 		_txt(hint, Vector2(W * 0.5, H - 24), 22, Color(0.9, 0.9, 0.9, clampf(hint_t, 0, 1)), HORIZONTAL_ALIGNMENT_CENTER, W - 40)
 	if show_debug:
 		var y := 170.0

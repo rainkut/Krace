@@ -298,7 +298,7 @@ func show_race_select() -> void:
 	sc.add_child(lv)
 	for i in Data.RACES.size():
 		var rd: Dictionary = Data.RACES[i]
-		var locked: bool = int(Save.d["rep"]) < int(rd["req"])
+		var locked := false
 		var done: Dictionary = Save.d["done"].get(rd["id"], {})
 		var tag := "LOCKED  rep %d" % rd["req"] if locked else ("CLEARED" if done.get("win", false) else "NEW")
 		var b2 := _btn("%s   [%s]   %s" % [rd["name"], String(rd["mode"]).to_upper(), tag], func() -> void:
@@ -314,7 +314,7 @@ func show_race_select() -> void:
 	dv.add_theme_constant_override("separation", 10)
 	pc.add_child(dv)
 	var rd2: Dictionary = Data.RACES[sel_race]
-	var locked2: bool = int(Save.d["rep"]) < int(rd2["req"])
+	var locked2 := false
 	dv.add_child(_lbl(rd2["name"], 36, ACC))
 	dv.add_child(_lbl(Data.MODES[rd2["mode"]], 22, TEXT))
 	var blurb := _lbl(rd2["blurb"], 20, DIM)

@@ -16,6 +16,7 @@ var color := Color.ORANGE
 var body_style := 0
 var stats: Dictionary = {}
 var spd_mult := 1.0
+var speed_cap := 0.0
 var acc_mult := 1.0
 var dmg_mult_out := 1.0
 var aggr := 0.3
@@ -49,13 +50,22 @@ var scrape := false
 static var SPRAY := ""
 var sparks: CPUParticles3D
 var spray: CPUParticles3D
-var inp := {"steer": 0.0, "throttle": 1.0, "brake": 0.0, "nitro": false, "atk": 0, "kick": false}
+var inp := {"steer": 0.0, "throttle": 1.0, "brake": 0.0, "nitro": false, "atk": 0, "kick": false, "flip": false, "spin": 0.0}
 var anim_t := 1.0
 var anim_side := 1
 var anim_kick := false
 var hit_flash := 0.0
 var bump_t := 0.0
 var score := 0.0
+var drift_t := 0.0
+var air_y := 0.0
+var air_vy := 0.0
+var airborne := false
+var ramp_y := 0.0
+var air_time := 0.0
+var flip_rot := 0.0
+var spin_rot := 0.0
+var land_evt := {}
 
 var model: Node3D
 var bike3: Node3D
@@ -401,13 +411,15 @@ func step(dt: float, track: Track, active: bool) -> void:
 	var vmax: float = stats["vmax"] * spd_mult * cond_f * terrain
 	var acc: float = stats["acc"] * acc_mult
 	nitro_on = false
-	if active and inp["nitro"] and nitro > 1.0 and state != St.FINISHING and state != St.IDLE:
+	if active and inp["nitro"] and nitro > 1.0 and speed_cap <= 0.0 and state != St.FINISHING and state != St.IDLE:
 		nitro_on = true
-		nitro = maxf(0.0, nitro - 26.0 * dt)
-		vmax *= 1.2
-		acc *= 2.0
+		nitro = maxf(0.0, nitro - 20.0 * dt)
+		vmax *= 1.32
+		acc *= 2.8
 	elif active:
-		nitro = minf(stats["nitro_cap"], nitro + stats["nitro_regen"] * 0.5 * dt)
+		nitro = minf(stats["nitro_cap"], nitro + stats["nitro_regen"] * 0.8 * dt)
+	if speed_cap > 0.0:
+		vmax = minf(vmax, speed_cap)
 	var throttle: float = inp["throttle"] if active else 0.0
 	if state == St.FINISHING:
 		throttle = 0.0
@@ -431,6 +443,9 @@ func step(dt: float, track: Track, active: bool) -> void:
 	vx *= exp(-3.2 * dt)
 	vx = clampf(vx, -15.0, 15.0)
 	x += vx * dt
+	var drifting := active and not airborne and v > 32.0 and absf(vx) > 2.0 and absf(steer_i) > 0.5 and signf(steer_i) == signf(vx)
+	drift_t = drift_t + dt if drifting else maxf(0.0, drift_t - dt * 3.0)
+	_ramp_air(dt, track)
 	var gain := track.shortcut_gain if dirt_zone else 1.0
 	s += v * dt * gain
 	# shortcut exit: nudge back to the road
@@ -438,6 +453,36 @@ func step(dt: float, track: Track, active: bool) -> void:
 		vx -= 11.0 * dt
 	scrape = false
 	_barrier(track)
+
+func _ramp_air(dt: float, track: Track) -> void:
+	if airborne:
+		air_time += dt
+		air_y += air_vy * dt
+		air_vy -= 24.0 * dt
+		if inp["flip"]:
+			flip_rot += 7.0 * dt
+		if absf(float(inp["spin"])) > 0.1:
+			spin_rot += signf(float(inp["spin"])) * 8.0 * dt
+		if air_y <= 0.0:
+			airborne = false
+			air_y = 0.0
+			var tr := floori((absf(flip_rot) + 0.8) / TAU) + floori((absf(spin_rot) + 0.8) / TAU)
+			var fa := fposmod(absf(flip_rot), TAU)
+			var sa := fposmod(absf(spin_rot), TAU)
+			var clean := (fa < 0.8 or fa > TAU - 0.8) and (sa < 0.8 or sa > TAU - 0.8)
+			land_evt = {"tricks": tr, "clean": clean, "air": air_time, "attempt": absf(flip_rot) + absf(spin_rot) > 0.5}
+			flip_rot = 0.0
+			spin_rot = 0.0
+		return
+	var ry := track.ramp_h(s) if absf(x) < Track.ROAD_HALF else 0.0
+	if ramp_y > 0.4 and ry <= 0.0:
+		airborne = true
+		air_y = ramp_y
+		air_vy = v * 0.16 + 4.0
+		air_time = 0.0
+		flip_rot = 0.0
+		spin_rot = 0.0
+	ramp_y = ry
 
 func _barrier(track: Track) -> void:
 	var lim := Track.BARRIER - 0.4
@@ -472,12 +517,17 @@ func place_in_world(track: Track, dt: float) -> void:
 	var pitch := atan(track.slope_at(s))
 	var yw := track.yaw_at(s) - atan2(vx, maxf(v, 8.0)) * 0.9
 	var gy := track.pos_at(s, x).y
-	position = track.pos_at(s, x)
-	rotation = Vector3(pitch, yw, 0.0)
+	position = track.pos_at(s, x) + Vector3(0, air_y if airborne else ramp_y, 0)
+	var up_tilt := 0.0
+	if airborne:
+		up_tilt = clampf(air_vy * 0.018, -0.35, 0.35)
+	elif ramp_y > 0.0:
+		up_tilt = 0.108
+	rotation = Vector3(pitch + up_tilt, yw, 0.0)
 	if crash_t <= 0.0:
 		var target_roll := -vx * 0.045 + track.curve_at(s) * v * 1.4
 		roll = lerpf(roll, clampf(target_roll, -0.7, 0.7), clampf(dt * 9.0, 0.0, 1.0))
-		model.rotation = Vector3(0, 0, roll)
+		model.rotation = Vector3(flip_rot if airborne else 0.0, 0, roll + (spin_rot if airborne else 0.0))
 	_bob += dt * (20.0 + v * 0.5)
 	if sparks != null:
 		sparks.emitting = (scrape or crash_t > 0.0) and v > 8.0
