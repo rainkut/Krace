@@ -61,6 +61,7 @@ func setup(race_def: Dictionary) -> void:
 	track = Track.new()
 	track.build(def)
 	_build_world()
+	Racer.SPRAY = "rain" if weather == "rain" else ("dust" if weather == "dust" else "")
 	_build_riders()
 	_build_pickups()
 	traffic_target = int(round(float(def.get("traffic", 0.5)) * 14.0))
@@ -79,10 +80,14 @@ func setup(race_def: Dictionary) -> void:
 	add_child(cam)
 	_update_camera(0.1, true)
 	_build_weather()
+	_build_fx()
 	Sfx.music(true, "music_night" if tod == "night" else "music")
+	Sfx.rain(weather == "rain")
 
 func _exit_tree() -> void:
 	Sfx.engine(false)
+	Sfx.rain(false)
+	Sfx.tunnel(false)
 
 # ---------------------------------------------------------------- world
 const TOD := {"r2": "night", "r5": "night", "r8": "night", "r6": "dusk"}
@@ -93,6 +98,9 @@ var env_ref: Environment
 var amb_base := 0.75
 var flash := 0.0
 var flash_t := 4.0
+var blur_mat: ShaderMaterial
+var blur_amt := 0.0
+var streaks: CPUParticles3D
 var headlight: SpotLight3D
 
 func _build_world() -> void:
@@ -146,8 +154,13 @@ func _build_world() -> void:
 	sun.rotation_degrees = Vector3(-48, -35, 0) if tod != "dusk" else Vector3(-14, -35, 0)
 	sun.light_energy = sun_e
 	sun.light_color = sun_c
-	sun.shadow_enabled = false
+	sun.shadow_enabled = tod != "night" and weather != "fog"
+	sun.directional_shadow_max_distance = 55.0
+	sun.shadow_blur = 1.5
 	add_child(sun)
+	track.wet = weather == "rain"
+	track.night = tod == "night"
+	TrafficCar.night = tod == "night"
 	track.build_visuals(self)
 	if tod != "day" or weather == "rain" or weather == "fog":
 		_build_lamps()
@@ -232,7 +245,111 @@ func _build_weather() -> void:
 		pr2.mesh = d
 		cam.add_child(pr2)
 
+func _build_fx() -> void:
+	var cl := CanvasLayer.new()
+	cl.layer = 4
+	add_child(cl)
+	var cr := ColorRect.new()
+	cr.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sh := Shader.new()
+	sh.code = """shader_type canvas_item;
+uniform sampler2D scr : hint_screen_texture, filter_linear_mipmap;
+uniform float amt = 0.0;
+uniform float ca = 0.0;
+void fragment() {
+	vec2 d = SCREEN_UV - vec2(0.5, 0.45);
+	float r = length(d);
+	vec3 c = vec3(0.0);
+	float w = amt * smoothstep(0.12, 0.6, r);
+	for (int i = 0; i < 6; i++) {
+		float k = 1.0 - w * float(i) / 6.0 * 0.15;
+		c += texture(scr, vec2(0.5, 0.45) + d * k).rgb;
+	}
+	c /= 6.0;
+	c.r = mix(c.r, texture(scr, vec2(0.5, 0.45) + d * (1.0 + ca * r)).r, step(0.001, ca));
+	c.b = mix(c.b, texture(scr, vec2(0.5, 0.45) + d * (1.0 - ca * r)).b, step(0.001, ca));
+	c *= 1.0 - amt * 0.35 * smoothstep(0.35, 0.8, r);
+	COLOR = vec4(c, 1.0);
+}"""
+	blur_mat = ShaderMaterial.new()
+	blur_mat.shader = sh
+	cr.material = blur_mat
+	cl.add_child(cr)
+	var st := CPUParticles3D.new()
+	st.amount = 40
+	st.lifetime = 0.35
+	st.local_coords = false
+	st.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	st.emission_box_extents = Vector3(5, 2.5, 1)
+	st.position = Vector3(0, 0, -16)
+	st.direction = Vector3(0, 0, 1)
+	st.spread = 2.0
+	st.initial_velocity_min = 45.0
+	st.initial_velocity_max = 60.0
+	st.gravity = Vector3.ZERO
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.015, 0.015, 2.4)
+	var mm := StandardMaterial3D.new()
+	mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mm.albedo_color = Color(1, 1, 1, 0.22)
+	mm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	bm.material = mm
+	st.mesh = bm
+	st.emitting = false
+	cam.add_child(st)
+	streaks = st
+	_build_streaks()
+
+func _build_streaks() -> void:
+	if not (tod != "day" or weather == "rain"):
+		return
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	var qm := QuadMesh.new()
+	qm.size = Vector2(1.6, 30.0)
+	mm.mesh = qm
+	var pts: Array = []
+	var i := 0.0
+	while i < track.length:
+		if int(i / 36.0) % 1 == 0:
+			for sx in [-1.0, 1.0]:
+				var t := Transform3D(Basis.from_euler(Vector3(-PI / 2, 0, 0)), track.pos_at(i, 4.5 * sx, 0.04))
+				t.basis = Basis.from_euler(Vector3(0, track.yaw_at(i), 0)) * Basis.from_euler(Vector3(-PI / 2, 0, 0))
+				pts.append(t)
+		i += 36.0
+	mm.instance_count = pts.size()
+	for k in pts.size():
+		mm.set_instance_transform(k, pts[k])
+	var mi := MultiMeshInstance3D.new()
+	mi.multimesh = mm
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.albedo_texture = Racer.glow_tex()
+	m.albedo_color = Color(1.0, 0.8, 0.45, 0.22 if weather == "rain" else 0.1)
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+
+func _update_fx(dt: float) -> void:
+	Sfx.tunnel((track.feat_at(player.s) & Track.F_TUNNEL) != 0)
+	Sfx.scrape_snd(player.scrape)
+	var v01 := clampf(player.v / 80.0, 0.0, 1.0)
+	var a := clampf((v01 - 0.35) / 0.65, 0.0, 1.0)
+	if player.nitro_on:
+		a = minf(a + 0.5, 1.0)
+	blur_amt = lerpf(blur_amt, a, dt * 4.0)
+	if blur_mat != null:
+		blur_mat.set_shader_parameter("amt", blur_amt * (0.5 if Save.setting("shake") == 0 else 1.0))
+		blur_mat.set_shader_parameter("ca", 0.025 if player.nitro_on else 0.0)
+	if streaks != null:
+		streaks.emitting = v01 > 0.4
+
 func _update_atmosphere(dt: float) -> void:
+	_update_fx(dt)
 	if headlight != null:
 		var tun := (track.feat_at(player.s) & Track.F_TUNNEL) != 0
 		headlight.light_energy = lerpf(headlight.light_energy, (6.0 if tod == "night" else 2.5) + (3.0 if tun else 0.0), dt * 3.0)
@@ -939,7 +1056,7 @@ func _update_camera(dt: float, snap: bool) -> void:
 		cam_pos = want
 		cam_init = true
 	else:
-		cam_pos = cam_pos.lerp(want, 1.0 - exp(-dt * 9.0))
+		cam_pos = cam_pos.lerp(want, 1.0 - exp(-dt * 6.5))
 	var look := track.pos_at(p.s + 13.0, p.x * 0.9, 1.5)
 	var sk := float(Save.setting("shake"))
 	shake = maxf(0.0, shake - dt * 2.2)

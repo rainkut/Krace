@@ -46,6 +46,9 @@ var place := 1
 var grudge: Racer = null
 var on_dirt := false
 var scrape := false
+static var SPRAY := ""
+var sparks: CPUParticles3D
+var spray: CPUParticles3D
 var inp := {"steer": 0.0, "throttle": 1.0, "brake": 0.0, "nitro": false, "atk": 0, "kick": false}
 var anim_t := 1.0
 var anim_side := 1
@@ -63,7 +66,7 @@ var body_parts: Array[Node3D] = []
 var _frame := -1
 var _bob := 0.0
 const BIKE_IDS := ["thunderbolt", "nightbreaker", "scrambler", "commuter", "streak"]
-const LEAN_DEG := [-30, -20, -10, 0, 10, 20, 30]
+const LEAN_DEG := [-30, -25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
 const SPR_PX := 2.5 / 384.0
 const SPR_Y := 0.80
 # per-bike: shoulder height, shoulder z, tail light (y,z), exhaust x list + (y,z)
@@ -92,6 +95,16 @@ static func glow_tex() -> GradientTexture2D:
 		_glow_tex.width = 64
 		_glow_tex.height = 64
 	return _glow_tex
+
+static func glow_mat(c: Color, tex: Texture2D) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.albedo_texture = tex
+	m.albedo_color = c
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	return m
 
 func _glow(c: Color, size: float, pos: Vector3) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
@@ -174,12 +187,48 @@ func _box(parent: Node3D, size: Vector3, pos: Vector3, c: Color, rough := 0.6, m
 	parent.add_child(mi)
 	return mi
 
+func _mk_particles(amount: int, life: float, col: Color, size: float, vel: Vector2, grav: Vector3, unshaded := true) -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.amount = amount
+	p.lifetime = life
+	p.local_coords = false
+	p.emitting = false
+	p.direction = Vector3(0, 0.6, 1)
+	p.spread = 30.0
+	p.initial_velocity_min = vel.x
+	p.initial_velocity_max = vel.y
+	p.gravity = grav
+	var sm := SphereMesh.new()
+	sm.radius = size
+	sm.height = size * 2.0
+	sm.radial_segments = 6
+	sm.rings = 3
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = col
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	if col.r > 0.9 and col.g < 0.8:
+		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	sm.material = m
+	p.mesh = sm
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(p)
+	return p
+
 func _build() -> void:
 	model = Node3D.new()
 	add_child(model)
+	sparks = _mk_particles(36, 0.4, Color(1.0, 0.7, 0.2, 1.0), 0.03, Vector2(3.0, 8.0), Vector3(0, -9, 0))
+	sparks.position = Vector3(0, 0.15, 0.3)
+	if SPRAY == "rain":
+		spray = _mk_particles(30, 0.6, Color(0.8, 0.85, 0.95, 0.35), 0.14, Vector2(1.5, 4.0), Vector3(0, -1.5, 0))
+	elif SPRAY == "dust":
+		spray = _mk_particles(30, 0.9, Color(0.78, 0.64, 0.44, 0.4), 0.22, Vector2(1.0, 3.0), Vector3(0, 0.3, 0))
+	if spray != null:
+		spray.position = Vector3(0, 0.12, 0.7)
 	var id: String = BIKE_IDS[clampi(body_style, 0, 4)]
 	spr = _sprite("res://assets/bikes/%s_3.png" % id)
-	spr_empty = _sprite("res://assets/bikes/%s_empty_3.png" % id)
+	spr_empty = _sprite("res://assets/bikes/%s_empty_6.png" % id)
 	spr_empty.visible = false
 	var tp: Vector2 = BTAIL[body_style]
 	glow_tail = _glow(Color(1.0, 0.1, 0.05, 0.85), 0.28, Vector3(0, tp.x, tp.y))
@@ -429,12 +478,16 @@ func place_in_world(track: Track, dt: float) -> void:
 	if crash_t <= 0.0:
 		var target_roll := -vx * 0.045 + track.curve_at(s) * v * 1.4
 		roll = lerpf(roll, clampf(target_roll, -0.7, 0.7), clampf(dt * 9.0, 0.0, 1.0))
-		var idx := clampi(roundi((-rad_to_deg(roll) + 30.0) / 10.0), 0, 6)
+		var idx := clampi(roundi((-rad_to_deg(roll) + 30.0) / 5.0), 0, 12)
 		if idx != _frame:
 			_frame = idx
 			spr.texture = tex("res://assets/bikes/%s_%d.png" % [BIKE_IDS[body_style], idx])
 		model.rotation = Vector3(0, 0, roll + deg_to_rad(LEAN_DEG[idx]))
 	_bob += dt * (20.0 + v * 0.5)
+	if sparks != null:
+		sparks.emitting = (scrape or crash_t > 0.0) and v > 8.0
+	if spray != null:
+		spray.emitting = v > 18.0 and crash_t <= 0.0
 	spr.position.y = SPR_Y + sin(_bob) * 0.006 * clampf(v / 40.0, 0.0, 1.0)
 	spr.rotation.x = lerpf(spr.rotation.x, -0.07 if nitro_on else 0.0, clampf(dt * 6.0, 0.0, 1.0))
 	spr_empty.position.y = spr.position.y

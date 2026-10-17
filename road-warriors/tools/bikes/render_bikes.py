@@ -9,7 +9,7 @@ OUT = argv[1] if len(argv) > 1 else '/tmp/bikes'
 opt = {a.split('=')[0]: a.split('=')[1] for a in argv if a.startswith('--') and '=' in a}
 NORIDER = '--norider' in argv
 RES, SAMPLES, ONLY = int(opt.get('--res', 512)), int(opt.get('--samples', 48)), opt.get('--only')
-LEANS = [-30, -20, -10, 0, 10, 20, 30]
+LEANS = list(range(-30, 31, 5))
 V = Vector
 
 def mat(name, col, metal=0.0, rough=0.5, emit=0.0):
