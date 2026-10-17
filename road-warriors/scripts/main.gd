@@ -30,6 +30,7 @@ var prev_vp: SubViewport
 var prev_angle := 0.6
 var sim_id := ""
 var want_auto := false
+var kicktest := false
 var sim_log_t := 0.0
 var theme_res: Theme
 
@@ -62,6 +63,8 @@ func _ready() -> void:
 			arg_race = a.substr(7)
 		elif a.begins_with("--diff="):
 			Save.d["set"]["diff"] = int(a.substr(7))
+		elif a == "--kicktest":
+			kicktest = true
 		elif a == "--auto":
 			want_auto = true
 		elif a == "--fresh":
@@ -70,6 +73,9 @@ func _ready() -> void:
 			Save.d["rep"] = int(a.substr(6))
 	if sim_id != "" or arg_race != "":
 		var rid := sim_id if sim_id != "" else arg_race
+		if rid == "daily":
+			start_race(Data.daily_def(), sim_id != "" or want_auto)
+			return
 		for rd in Data.RACES:
 			if rd["id"] == rid:
 				start_race(rd, sim_id != "" or want_auto)
@@ -197,6 +203,10 @@ func _set_preview(bike_id: String) -> void:
 	prev_bike = Racer.new()
 	prev_bike.setup({"name": "", "player": true, "color": b["color"], "body": b["body"], "stats": Data.stats(bike_id, Save.bike_upg(bike_id))})
 	prev_holder.add_child(prev_bike)
+	var cu: Dictionary = Save.d["custom"].get(bike_id, {})
+	if not cu.is_empty():
+		var pi := int(cu.get("paint", -1))
+		prev_bike.apply_paint(Data.PAINTS[pi] if pi >= 0 and pi < Data.PAINTS.size() else Color(0, 0, 0, 0), Data.DECALS[clampi(int(cu.get("decal", 0)), 0, Data.DECALS.size() - 1)])
 	for a in [prev_bike.arm_l, prev_bike.arm_r]:
 		a.rotation = Vector3(-1.15, 0, 0)
 	for l in [prev_bike.leg_l, prev_bike.leg_r]:
@@ -245,6 +255,10 @@ func show_menu() -> void:
 	var sp := Control.new()
 	sp.custom_minimum_size = Vector2(0, 4)
 	v.add_child(sp)
+	var dd: Dictionary = Save.d["daily"]
+	var dkey := Data.daily_key()
+	var dtag := "  [DONE]" if int(dd.get("claimed", 0)) == dkey else "  [NEW]"
+	v.add_child(_btn("DAILY CHALLENGE" + dtag, show_daily, 340, 26))
 	v.add_child(_btn("CAREER", show_race_select, 340, 30))
 	v.add_child(_btn("GARAGE", show_garage, 340, 30))
 	v.add_child(_btn("SETTINGS", func() -> void: show_settings(show_menu), 340, 30))
@@ -259,6 +273,42 @@ func show_menu() -> void:
 	pv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(pv)
 	_set_preview(Save.d["bike"])
+
+func show_daily() -> void:
+	gstate = "DAILY"
+	_free_race()
+	_show_bg(true)
+	_clear()
+	var dr := Data.daily_def()
+	var dd: Dictionary = Save.d["daily"]
+	var key := int(dr["date"])
+	var m := _full(ui)
+	var c := CenterContainer.new()
+	c.set_anchors_preset(Control.PRESET_FULL_RECT)
+	m.add_child(c)
+	var pc := PanelContainer.new()
+	c.add_child(pc)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	v.custom_minimum_size = Vector2(620, 0)
+	pc.add_child(v)
+	v.add_child(_lbl("DAILY CHALLENGE", 44, ACC, HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl("%d-%02d-%02d" % [key / 10000, (key / 100) % 100, key % 100], 22, DIM, HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl(Data.MODES[dr["mode"]], 26, TEXT, HORIZONTAL_ALIGNMENT_CENTER))
+	var theme_names := ["Countryside", "City", "Desert"]
+	v.add_child(_lbl("%.1f km   %s   %s, %s   Rivals %d" % [float(dr["len"]) / 1000.0, theme_names[int(dr["theme"])], String(dr["tod"]).capitalize(), String(dr["weather"]).capitalize(), dr["rivals"].size()], 20, TEXT, HORIZONTAL_ALIGNMENT_CENTER))
+	var claimed := int(dd.get("claimed", 0)) == key
+	v.add_child(_lbl("Reward  $%d   (once a day)" % int(dr["reward"]) if not claimed else "Today's reward claimed - come back tomorrow", 24, GOOD if not claimed else DIM, HORIZONTAL_ALIGNMENT_CENTER))
+	var best: Dictionary = dd.get("best", {})
+	if int(best.get("date", 0)) == key:
+		v.add_child(_lbl("Today's best   %s   score %d" % [_fmt_time(float(best.get("time", 0))), int(best.get("score", 0))], 22, TEXT, HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_lbl("Streak  %d day(s)" % int(dd.get("streak", 0)), 20, DIM, HORIZONTAL_ALIGNMENT_CENTER))
+	var hb := HBoxContainer.new()
+	hb.alignment = BoxContainer.ALIGNMENT_CENTER
+	hb.add_theme_constant_override("separation", 12)
+	v.add_child(hb)
+	hb.add_child(_btn("START", func() -> void: start_race(dr, false), 260, 28))
+	hb.add_child(_btn("BACK", show_menu, 160, 24))
 
 func show_race_select() -> void:
 	gstate = "RACE_SELECT"
@@ -413,10 +463,56 @@ func show_garage() -> void:
 		bb.disabled = int(Save.d["money"]) < int(b["price"])
 		left.add_child(bb)
 	# middle: preview
-	var pv := _make_preview(Vector2(220, 300))
+	var mid := VBoxContainer.new()
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.add_theme_constant_override("separation", 8)
+	body.add_child(mid)
+	var pv := _make_preview(Vector2(220, 260))
 	pv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body.add_child(pv)
+	pv.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mid.add_child(pv)
 	_set_preview(bid)
+	if owned:
+		var cu: Dictionary = Save.d["custom"].get(bid, {})
+		mid.add_child(_lbl("PAINT", 18, DIM, HORIZONTAL_ALIGNMENT_CENTER))
+		var pr := HFlowContainer.new()
+		pr.alignment = FlowContainer.ALIGNMENT_CENTER
+		pr.add_theme_constant_override("h_separation", 6)
+		mid.add_child(pr)
+		var stock := _btn("STOCK", func() -> void:
+			cu.erase("paint")
+			Save.d["custom"][bid] = cu
+			Save.write()
+			show_garage(), 0, 16)
+		stock.disabled = not cu.has("paint")
+		pr.add_child(stock)
+		for pi in Data.PAINTS.size():
+			var pb := Button.new()
+			pb.custom_minimum_size = Vector2(46, 46)
+			var sel := int(cu.get("paint", -1)) == pi
+			for stn in ["normal", "hover", "pressed", "focus"]:
+				pb.add_theme_stylebox_override(stn, _sb(Data.PAINTS[pi], Color.WHITE if sel else Color(0, 0, 0, 0.6), 4 if sel else 2, 8))
+			pb.pressed.connect(func() -> void:
+				cu["paint"] = pi
+				Save.d["custom"][bid] = cu
+				Save.write()
+				Sfx.play("click")
+				show_garage())
+			pr.add_child(pb)
+		mid.add_child(_lbl("DECAL", 18, DIM, HORIZONTAL_ALIGNMENT_CENTER))
+		var dr := HFlowContainer.new()
+		dr.alignment = FlowContainer.ALIGNMENT_CENTER
+		dr.add_theme_constant_override("h_separation", 6)
+		mid.add_child(dr)
+		for di in Data.DECALS.size():
+			var db := _btn(Data.DECALS[di] if Data.DECALS[di] != "" else "NONE", func() -> void:
+				cu["decal"] = di
+				Save.d["custom"][bid] = cu
+				Save.write()
+				Sfx.play("click")
+				show_garage(), 0, 18)
+			db.disabled = int(cu.get("decal", 0)) == di
+			dr.add_child(db)
 	# right: upgrades
 	var pc := PanelContainer.new()
 	pc.custom_minimum_size = Vector2(430, 0)
@@ -685,6 +781,7 @@ func start_race(rd: Dictionary, sim: bool) -> void:
 	cur_def = rd
 	race = Race.new()
 	race.autopilot = sim
+	race.kicktest = kicktest
 	add_child(race)
 	race.setup(rd)
 	race.ended.connect(_on_race_ended)
@@ -698,6 +795,7 @@ func start_race(rd: Dictionary, sim: bool) -> void:
 	gstate = "COUNTDOWN"
 
 func pause() -> void:
+	Engine.time_scale = 1.0
 	gstate = "PAUSED"
 	get_tree().paused = true
 	if touch != null:
@@ -739,9 +837,28 @@ func _on_race_ended(res: Dictionary) -> void:
 		e["place"] = int(res["place"])
 		e["time"] = float(res["time"])
 	Save.d["done"][rid] = e
+	if res.get("daily", false):
+		var dd: Dictionary = Save.d["daily"]
+		var key := int(res["date"])
+		if res["win"] and int(dd.get("claimed", 0)) != key:
+			var yest := int(dd.get("claimed", 0))
+			dd["streak"] = int(dd.get("streak", 0)) + 1 if (yest > 0 and key - yest <= 1 + (70 if key % 100 == 1 else 0)) else 1
+			dd["claimed"] = key
+		var b: Dictionary = dd.get("best", {})
+		if res["win"] and (int(b.get("date", 0)) != key or float(res["time"]) < float(b.get("time", 1e9))):
+			dd["best"] = {"date": key, "time": float(res["time"]), "score": int(res["score"])}
+		Save.d["daily"] = dd
+	var gp: Array = res.get("ghost", [])
+	if gp.size() >= 8:
+		var old: Dictionary = Save.d["ghost"].get(str(res["ghost_id"]), {})
+		if not old.has("time") or float(res["ftime"]) < float(old["time"]):
+			Save.d["ghost"][str(res["ghost_id"])] = {"time": float(res["ftime"]), "pts": gp}
+			print("[ghost] saved ", res["ghost_id"], " time=", res["ftime"], " samples=", gp.size() / 2)
 	Save.write()
 	if sim_id != "":
-		print("[sim] RESULT ", JSON.stringify(res))
+		var pr := res.duplicate()
+		pr["ghost"] = (pr["ghost"] as Array).size()
+		print("[sim] RESULT ", JSON.stringify(pr))
 		for r in race.racers:
 			print("[sim] ", r.rname, " finished=", r.finished, " t=", r.finish_time, " s=", r.s)
 		get_tree().quit(0)
@@ -784,6 +901,13 @@ func show_results(res: Dictionary) -> void:
 		lines.append("Score         %d" % res["score"])
 	lines.append("Top speed     %d km/h" % int(float(s["top"]) * 3.6))
 	lines.append("Overtakes %d    Near misses %d    Takedowns %d    Crashes %d" % [s["overtakes"], s["near"], s["takedowns"], s["crashes"]])
+	lines.append("Hits %d    Best combo x%d" % [s["hits"], s["combo"]])
+	if res["mode"] == "chase":
+		lines.append("Cops downed %d    Rams taken %d" % [s["cops"], s["rams"]])
+	if res.get("daily", false) and res["win"]:
+		lines.append("Daily reward claimed" if not res["daily_repeat"] else "Daily already claimed - reduced prize")
+	if (res.get("ghost", []) as Array).size() >= 8:
+		lines.append("Ghost saved")
 	if res["shortcut"]:
 		lines.append("Shortcut used")
 	for ln in lines:

@@ -152,7 +152,28 @@ func _draw() -> void:
 	_bar(Rect2(cx - 100, cy + 70, 200, 20), p.nitro / float(p.stats["nitro_cap"]), Color(0.3, 0.8, 1.0), "NITRO")
 	# combo / score
 	if race.combo > 1:
-		_txt("COMBO x%d" % race.combo, Vector2(W * 0.5, H * 0.72), 34, Color(1.0, 0.9, 0.3), HORIZONTAL_ALIGNMENT_CENTER, 500)
+		var cf := clampf(race.combo_t / 4.0, 0.0, 1.0)
+		var cc := Color(1.0, 0.9, 0.3).lerp(Color(1.0, 0.35, 0.2), clampf(float(race.combo - 2) / 6.0, 0.0, 1.0))
+		_txt("COMBO x%d" % race.combo, Vector2(W * 0.5, H * 0.70), 28 + race.combo * 3, cc, HORIZONTAL_ALIGNMENT_CENTER, 500)
+		_bar(Rect2(W * 0.5 - 110, H * 0.70 + 12, 220, 10), cf, cc)
+	if race.boss != null and race.state != Race.RState.GAME_OVER:
+		var b := race.boss
+		var bw := 420.0
+		_bar(Rect2(W * 0.5 - bw * 0.5, 100, bw, 22), maxf(0.0, b.health) / b.max_health, Color(0.85, 0.15, 0.2))
+		_txt("BOSS  %s" % b.rname.to_upper(), Vector2(W * 0.5, 96), 22, white, HORIZONTAL_ALIGNMENT_CENTER, 500)
+	if race.mode == "chase":
+		var flick := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012)
+		var near := false
+		for c in race.cops:
+			if c.wreck_t <= 0.0 and absf(c.s - p.s) < 80.0:
+				near = true
+		if near:
+			draw_rect(Rect2(0, 0, 36, H), Color(1.0, 0.1, 0.1, 0.22 * flick))
+			draw_rect(Rect2(W - 36, 0, 36, H), Color(0.15, 0.3, 1.0, 0.22 * (1.0 - flick)))
+		_txt("HEAT " + "*".repeat(race.heat) + "    COPS DOWN %d" % int(race.st["cops"]), Vector2(24, 190), 24, Color(1.0, 0.45, 0.4))
+	if race.ghost_node != null and race.state == Race.RState.RACING:
+		var gg := race.ghost_gap
+		_txt("GHOST  %s %d m" % ["AHEAD" if gg > 0.0 else "BEHIND", int(absf(gg))], Vector2(W * 0.42, 118 if race.boss == null else 150), 22, Color(0.5, 0.9, 1.0) if gg <= 0.0 else Color(1.0, 0.6, 0.5), HORIZONTAL_ALIGNMENT_CENTER, 400)
 	# toasts
 	var ty := H * 0.30
 	for i in range(toasts.size() - 1, -1, -1):
@@ -202,10 +223,14 @@ func _objective() -> String:
 			return "HIGHWAY RUN  score %d / %d" % [int(race.score), int(race.def["score_goal"])]
 		"revenge":
 			return "REVENGE  take down Tank Orlo"
+		"boss":
+			return "BOSS FIGHT  kick him off his bike"
+		"chase":
+			return "POLICE PURSUIT  survive"
 	return ""
 
 func _timer() -> String:
-	if race.mode in ["time", "highway", "survival"]:
+	if race.mode in ["time", "highway", "survival", "chase"]:
 		var t := maxf(0.0, race.time_left)
 		return "%d:%02d" % [int(t) / 60, int(t) % 60]
 	return "%d:%02d" % [int(race.time) / 60, int(race.time) % 60]

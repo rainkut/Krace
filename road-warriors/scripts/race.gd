@@ -55,7 +55,25 @@ var target_rival: Racer = null
 var shortcut_taken := false
 var was_in_shortcut := false
 
-var st := {"overtakes": 0, "near": 0, "takedowns": 0, "crashes": 0, "top": 0.0, "cash": 0, "hits": 0, "wrecked": 0}
+var st := {"overtakes": 0, "near": 0, "takedowns": 0, "crashes": 0, "top": 0.0, "cash": 0, "hits": 0, "wrecked": 0, "cops": 0, "rams": 0, "combo": 1}
+
+var kicktest := false
+var kt_done := false
+var slow_until := 0
+var slow_scale := 1.0
+var boss: Racer = null
+var boss_outran := false
+var cops: Array[TrafficCar] = []
+var cop_t := 3.0
+var heat := 1
+var siren_t := 0.0
+var ghost_id := ""
+var ghost_pts: Array = []
+var ghost_time := 0.0
+var ghost_node: Node3D
+var ghost_gap := 0.0
+var rec_pts: Array = []
+var rec_t := 0.0
 
 var touch_steer := 0.0
 
@@ -77,8 +95,9 @@ func setup(race_def: Dictionary) -> void:
 			time_left = float(def["target"])
 		"highway":
 			time_left = float(def["limit"])
-		"survival":
+		"survival", "chase":
 			time_left = float(def["survive"])
+	_setup_ghost()
 	cam = Camera3D.new()
 	cam.far = 1400.0
 	cam.fov = 70.0
@@ -91,6 +110,7 @@ func setup(race_def: Dictionary) -> void:
 	Sfx.rain(weather == "rain")
 
 func _exit_tree() -> void:
+	Engine.time_scale = 1.0
 	get_viewport().scaling_3d_scale = 1.0
 	Sfx.engine(false)
 	Sfx.rain(false)
@@ -112,8 +132,8 @@ var headlight: SpotLight3D
 
 func _build_world() -> void:
 	var theme := int(def.get("theme", 0))
-	tod = TOD.get(str(def.get("id", "")), "day")
-	weather = WEATHER.get(str(def.get("id", "")), "clear")
+	tod = str(def.get("tod", TOD.get(str(def.get("id", "")), "day")))
+	weather = str(def.get("weather", WEATHER.get(str(def.get("id", "")), "clear")))
 	var top := [Color(0.25, 0.48, 0.85), Color(0.12, 0.08, 0.28), Color(0.30, 0.42, 0.70)][theme] as Color
 	var hor := [Color(0.72, 0.84, 0.96), Color(0.62, 0.36, 0.52), Color(0.98, 0.76, 0.50)][theme] as Color
 	var amb := [Color(0.62, 0.66, 0.72), Color(0.55, 0.48, 0.62), Color(0.78, 0.68, 0.58)][theme] as Color
@@ -435,6 +455,10 @@ func _build_riders() -> void:
 	player.setup({"name": "You", "player": true, "arch": "balanced", "color": b["color"], "body": b["body"],
 		"stats": Data.stats(bid, Save.bike_upg(bid))})
 	add_child(player)
+	var cu: Dictionary = Save.d["custom"].get(bid, {})
+	if not cu.is_empty():
+		var pi := int(cu.get("paint", -1))
+		player.apply_paint(Data.PAINTS[pi] if pi >= 0 and pi < Data.PAINTS.size() else Color(0, 0, 0, 0), Data.DECALS[clampi(int(cu.get("decal", 0)), 0, Data.DECALS.size() - 1)])
 	player.s = slots[player_slot].x
 	player.x = slots[player_slot].y
 	racers.append(player)
@@ -450,7 +474,10 @@ func _build_riders() -> void:
 		var bike_id := _bike_for_arch(arch)
 		var upg := {"engine": lvl, "tires": lvl, "handling": lvl, "armor": lvl, "nitro": lvl, "brakes": lvl}
 		var r := Racer.new()
+		var is_boss := mode == "boss" and i == int(def.get("boss", 0))
 		var rn: String = Data.RIVAL_NAMES[(i + int(def["seed"])) % Data.RIVAL_NAMES.size()]
+		if is_boss:
+			rn = str(def["boss_name"])
 		if mode == "rival":
 			rn = "Mara Slate"
 		elif mode == "revenge" and i == int(def.get("target_rival", 0)):
@@ -458,16 +485,23 @@ func _build_riders() -> void:
 		var boost := 1.0
 		if mode == "rival":
 			boost = float(def.get("rival_boost", 1.0))
-		r.setup({"name": rn, "arch": arch, "color": A["color"], "body": i % 5, "stats": Data.stats(bike_id, upg),
-			"spd": float(A["spd"]) * float(diff["ai_speed"]) * boost, "acc": A["acc"], "dmg": A["dmg"],
-			"aggr": A["aggr"], "mass": A["mass"], "hp": A["hp"]})
+		r.setup({"name": rn, "arch": arch, "color": def["boss_color"] if is_boss else A["color"], "body": i % 5, "stats": Data.stats(bike_id, upg),
+			"spd": float(A["spd"]) * float(diff["ai_speed"]) * boost * (1.04 if is_boss else 1.0), "acc": A["acc"],
+			"dmg": float(A["dmg"]) * (1.3 if is_boss else 1.0),
+			"aggr": 0.9 if is_boss else A["aggr"], "mass": float(A["mass"]) * (1.3 if is_boss else 1.0),
+			"hp": float(def["boss_hp"]) if is_boss else A["hp"]})
 		add_child(r)
+		if is_boss:
+			boss = r
+			r.set_meta("boss", true)
+			r.model.scale = Vector3.ONE * 1.2
+			r.apply_paint(def["boss_color"], "B")
 		r.s = slots[slot_i].x
 		r.x = slots[slot_i].y
 		slot_i += 1
 		var ai := AIDriver.new()
 		ai.setup(r, diff, rng)
-		if mode == "survival" or (mode == "revenge" and i == int(def.get("target_rival", 0))):
+		if mode == "survival" or is_boss or (mode == "revenge" and i == int(def.get("target_rival", 0))):
 			ai.must_hunt = true
 			r.grudge = player
 		ais[r] = ai
@@ -485,48 +519,77 @@ func _enable_autopilot() -> void:
 	player.aggr = 0.4
 	autopilot_ai.setup(player, diff, rng)
 
+const PICK_COL := {"nitro": Color(0.2, 0.9, 1.0), "repair": Color(0.3, 1.0, 0.4), "bat": Color(1.0, 0.6, 0.15),
+	"chain": Color(1.0, 0.6, 0.15), "pipe": Color(1.0, 0.6, 0.15), "cash": Color(1.0, 0.85, 0.2)}
+
+func _pickup_node(k: String) -> Node3D:
+	var root := Node3D.new()
+	var col: Color = PICK_COL[k]
+	var mi := MeshInstance3D.new()
+	var m := StandardMaterial3D.new()
+	m.emission_enabled = true
+	m.emission = col
+	m.emission_energy_multiplier = 0.9
+	match k:
+		"bat":
+			var cm := CylinderMesh.new()
+			cm.top_radius = 0.1; cm.bottom_radius = 0.2; cm.height = 1.6
+			mi.mesh = cm
+			m.albedo_color = Color(0.6, 0.4, 0.2)
+		"chain":
+			var tm := TorusMesh.new()
+			tm.inner_radius = 0.3; tm.outer_radius = 0.55
+			mi.mesh = tm
+			m.albedo_color = Color(0.75, 0.75, 0.8)
+		"pipe":
+			var cm2 := CylinderMesh.new()
+			cm2.top_radius = 0.16; cm2.bottom_radius = 0.16; cm2.height = 1.5
+			mi.mesh = cm2
+			m.albedo_color = Color(0.5, 0.55, 0.65)
+		_:
+			var bm := BoxMesh.new()
+			bm.size = Vector3(0.9, 0.9, 0.9)
+			mi.mesh = bm
+			m.albedo_color = col
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if k == "bat" or k == "pipe":
+		mi.rotation.z = 0.9
+	root.add_child(mi)
+	if k in ["bat", "chain", "pipe"]:
+		var q := MeshInstance3D.new()
+		var qm := QuadMesh.new()
+		qm.size = Vector2(3.0, 3.0)
+		q.mesh = qm
+		q.material_override = Racer.glow_mat(Color(1.0, 0.55, 0.1, 0.55), Racer.glow_tex())
+		q.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(q)
+	return root
+
+func _add_pickup(ps: float, px: float, k: String) -> void:
+	var node := _pickup_node(k)
+	add_child(node)
+	pickups.append({"s": ps, "x": px, "kind": k, "node": node, "alive": true})
+	node.position = track.pos_at(ps, px, 1.0)
+
 func _build_pickups() -> void:
 	var prng := RandomNumberGenerator.new()
 	prng.seed = int(def["seed"]) * 13 + 5
 	var kinds := ["nitro", "nitro", "repair", "bat", "chain", "pipe", "cash", "cash"]
-	var colors := {"nitro": Color(0.2, 0.9, 1.0), "repair": Color(0.3, 1.0, 0.4), "bat": Color(1.0, 0.6, 0.15),
-		"chain": Color(1.0, 0.6, 0.15), "pipe": Color(1.0, 0.6, 0.15), "cash": Color(1.0, 0.85, 0.2)}
+	if mode in ["boss", "chase", "rival", "revenge", "survival", "knockout"]:
+		kinds = ["nitro", "repair", "bat", "chain", "pipe", "bat", "chain", "pipe", "cash"]
 	var s := 320.0
 	while s < track.finish_s - 250.0:
 		var k: String = kinds[prng.randi() % kinds.size()]
 		var px: float = Track.LANES[prng.randi() % 4] + prng.randf_range(-0.8, 0.8)
 		if mode == "highway" or mode == "time":
 			k = ["nitro", "cash", "repair"][prng.randi() % 3]
-		var node := MeshInstance3D.new()
-		var bm := BoxMesh.new()
-		bm.size = Vector3(0.9, 0.9, 0.9)
-		node.mesh = bm
-		var m := StandardMaterial3D.new()
-		m.albedo_color = colors[k]
-		m.emission_enabled = true
-		m.emission = colors[k]
-		m.emission_energy_multiplier = 0.9
-		node.material_override = m
-		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(node)
-		pickups.append({"s": s, "x": px, "kind": k, "node": node, "alive": true})
-		node.position = track.pos_at(s, px, 1.0)
+		_add_pickup(s, px, k)
 		s += prng.randf_range(170.0, 300.0)
 	if track.shortcut.y > 0.0:
 		var ss := track.shortcut.x + 40.0
 		while ss < track.shortcut.y - 30.0:
-			var node2 := MeshInstance3D.new()
-			var bm2 := BoxMesh.new()
-			bm2.size = Vector3(0.8, 0.8, 0.8)
-			node2.mesh = bm2
-			var m2 := StandardMaterial3D.new()
-			m2.albedo_color = colors["cash"]
-			m2.emission_enabled = true
-			m2.emission = colors["cash"]
-			node2.material_override = m2
-			add_child(node2)
-			pickups.append({"s": ss, "x": 12.0, "kind": "cash", "node": node2, "alive": true})
-			node2.position = track.pos_at(ss, 12.0, 1.0)
+			_add_pickup(ss, 12.0, "cash")
 			ss += 55.0
 
 # ---------------------------------------------------------------- traffic
@@ -637,6 +700,10 @@ func _physics_process(dt: float) -> void:
 	_collide_traffic()
 	_pickups_step()
 	_update_traffic(dt)
+	_update_cops(dt)
+	_ghost_step(dt)
+	if kicktest and not kt_done and state == RState.RACING and time > 0.8:
+		_kicktest()
 	_rewards(dt)
 	_finish_checks(dt)
 	_rank()
@@ -656,7 +723,7 @@ func _physics_process(dt: float) -> void:
 			r.place_in_world(track, dt)
 	for p in pickups:
 		if p["alive"]:
-			var n: MeshInstance3D = p["node"]
+			var n: Node3D = p["node"]
 			n.visible = absf(float(p["s"]) - player.s) < 500.0
 			if n.visible:
 				n.rotation.y += dt * 2.5
@@ -707,6 +774,11 @@ func _melee(a: Racer, side: int, kick: bool) -> void:
 		return
 	var wid: String = "kick" if kick else a.weapon
 	var w: Dictionary = Data.WEAPONS[wid]
+	var reach := float(w["reach"])
+	var win_s := 2.8
+	if a.is_player:
+		reach = maxf(reach, 4.6 if kick else 3.8)
+		win_s = 4.5 if kick else 3.8
 	var best: Racer = null
 	var bd := 99.0
 	for o in racers:
@@ -714,7 +786,7 @@ func _melee(a: Racer, side: int, kick: bool) -> void:
 			continue
 		var dsx := o.s - a.s
 		var dx := o.x - a.x
-		if absf(dsx) > 2.8 or absf(dx) > float(w["reach"]):
+		if absf(dsx) > win_s or absf(dx) > reach:
 			continue
 		if side != 0 and absf(dx) > 0.35 and signf(dx) != float(side):
 			continue
@@ -722,37 +794,69 @@ func _melee(a: Racer, side: int, kick: bool) -> void:
 		if d < bd:
 			bd = d
 			best = o
+	var best_cop: TrafficCar = null
+	if a.is_player:
+		for c in cops:
+			if c.wreck_t > 0.0:
+				continue
+			var cdx := c.x - a.x
+			var cdsx := c.s - a.s
+			if absf(cdsx) > win_s + 1.0 or absf(cdx) > reach + 1.0:
+				continue
+			if side != 0 and absf(cdx) > 0.35 and signf(cdx) != float(side):
+				continue
+			var cd2 := absf(cdx) + absf(cdsx) * 0.5
+			if cd2 < bd:
+				bd = cd2
+				best_cop = c
+				best = null
 	var sd := side
 	if sd == 0:
-		sd = int(signf(best.x - a.x)) if best != null else (int(signf(float(a.inp["steer"]))) if absf(float(a.inp["steer"])) > 0.2 else 1)
+		var tx := 0.0
+		if best != null:
+			tx = best.x - a.x
+		elif best_cop != null:
+			tx = best_cop.x - a.x
+		sd = int(signf(tx)) if (best != null or best_cop != null) else (int(signf(float(a.inp["steer"]))) if absf(float(a.inp["steer"])) > 0.2 else 1)
 		if sd == 0:
 			sd = 1
 	a.begin_attack(sd, kick)
-	if best == null:
+	if best == null and best_cop == null:
+		if a.is_player and kick:
+			Sfx.play("swing", 0.7, 0.8)
+			toast.emit("MISS", 0)
 		return
 	if not kick:
 		a.use_weapon_dur()
-	var o2 := best
 	var dmg := float(w["dmg"]) * a.dmg_mult_out
+	var kn := float(w["knock"]) * (1.5 if kick else 1.0)
+	if best_cop != null:
+		_hit_cop(best_cop, dmg, sd, kn, wid)
+		return
+	var o2 := best
 	var taken := float(diff["dmg_taken"]) if o2.is_player else 1.0
 	if god and o2.is_player:
 		dmg = 0.0
 	o2.damage(dmg, taken)
-	o2.vx += sd * float(w["knock"]) / maxf(0.6, o2.mass)
+	o2.vx += sd * kn / maxf(0.6, o2.mass)
 	o2.v *= 1.0 - float(w["slow"])
 	o2.hit_flash = 0.25
 	o2.bump_t = 0.2
 	a.v *= 1.0 - float(w["slow"]) * 0.3
-	Sfx.play("hit", 0.9, randf_range(0.9, 1.1))
 	if not a.is_player:
+		Sfx.play("hit", 0.9, randf_range(0.9, 1.1))
 		st["ai_hits"] = int(st.get("ai_hits", 0)) + 1
 	if a.is_player:
 		st["hits"] += 1
-		shake = maxf(shake, 0.25)
+		_hit_fx(o2.global_position, wid)
+		_combo_add(1)
+		st["cash"] += 8 * combo
+		score += 40.0 * combo
 		if o2.grudge == null:
 			o2.grudge = a
 	elif o2.is_player:
 		shake = maxf(shake, 0.5)
+		_slowmo(0.05, 0.2)
 		toast.emit("%s hit you" % a.rname, 2)
 		if a.grudge == null:
 			a.grudge = player
@@ -763,15 +867,74 @@ func _melee(a: Racer, side: int, kick: bool) -> void:
 	elif dmg >= 22.0 and o2.v > 22.0 and o2.crash_t <= 0.0:
 		o2.crash(1, sd)
 
+func _hit_fx(pos: Vector3, wid: String) -> void:
+	_spark(pos + Vector3(0, 1.0, 0), Color(1.0, 0.85, 0.3) if wid != "pipe" else Color(0.6, 0.9, 1.0), 2.6 if wid == "kick" else 2.0)
+	Sfx.play("kick" if wid == "kick" else "hit", 1.0, randf_range(0.92, 1.08))
+	if wid in ["pipe", "bat"]:
+		Sfx.play("crunch", 0.6, 1.3)
+	var nm: String = {"kick": "KICK!", "punch": "PUNCH!", "bat": "BAT!", "chain": "CHAIN!", "pipe": "PIPE!"}[wid]
+	toast.emit(nm, 3)
+	shake = maxf(shake, 0.45 if wid == "kick" else 0.3)
+	_slowmo(0.07, 0.12)
+
+func _spark(pos: Vector3, col: Color, size: float) -> void:
+	var q := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(size, size)
+	q.mesh = qm
+	var m := Racer.glow_mat(Color(col.r, col.g, col.b, 1.0), Racer.glow_tex())
+	q.material_override = m
+	q.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	q.position = pos
+	add_child(q)
+	var tw := q.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(q, "scale", Vector3.ONE * 2.2, 0.3)
+	tw.tween_property(m, "albedo_color:a", 0.0, 0.3)
+	tw.chain().tween_callback(q.queue_free)
+
+func _slowmo(secs: float, sc: float) -> void:
+	var now := Time.get_ticks_msec()
+	var until := now + int(secs * 1000.0)
+	if now >= slow_until:
+		slow_scale = sc
+	else:
+		slow_scale = minf(slow_scale, sc)
+	slow_until = maxi(slow_until, until)
+
+func _process(_dt: float) -> void:
+	if Time.get_ticks_msec() < slow_until:
+		Engine.time_scale = slow_scale
+	elif Engine.time_scale != 1.0:
+		Engine.time_scale = 1.0
+
+func _combo_add(n: int) -> void:
+	combo = mini(combo + n, 9)
+	combo_t = 4.0
+	st["combo"] = maxi(int(st["combo"]), combo)
+
+func _drop_weapon(at: Racer) -> void:
+	var k: String = ["bat", "chain", "pipe"][rng.randi() % 3]
+	_add_pickup(at.s + 12.0, clampf(at.x, -6.5, 6.5), k)
+
 func _knock_out(o: Racer, by: Racer, side: int) -> void:
 	o.crash(2, side)
 	o.set_meta("ko", true)
 	if by != null and by.is_player and not o.is_player:
 		st["takedowns"] += 1
 		player.nitro = minf(float(player.stats["nitro_cap"]), player.nitro + 25.0)
+		_combo_add(2)
 		score += 300.0 * combo
 		toast.emit("TAKEDOWN  %s" % o.rname, 3)
 		Sfx.play("pickup")
+		Sfx.play("crunch", 1.0)
+		shake = 1.0
+		_spark(o.global_position + Vector3(0, 1.0, 0), Color(1.0, 0.5, 0.2), 5.0)
+		if o == boss:
+			_slowmo(1.3, 0.2)
+		else:
+			_slowmo(0.8, 0.3)
+		_drop_weapon(o)
 
 func _health_checks() -> void:
 	for r in racers:
@@ -930,7 +1093,7 @@ func _collect(r: Racer, p: Dictionary) -> void:
 			r.set_weapon(k, int(Data.WEAPONS[k]["dur"]))
 	if r.is_player:
 		Sfx.play("pickup")
-		toast.emit({"nitro": "NITRO +", "repair": "REPAIR +", "cash": "CASH +60", "bat": "BAT", "chain": "CHAIN", "pipe": "PIPE"}[k], 1)
+		toast.emit({"nitro": "NITRO +", "repair": "REPAIR +", "cash": "CASH +60", "bat": "BAT - PUNCH TO SWING", "chain": "CHAIN - PUNCH TO SWING", "pipe": "PIPE - PUNCH TO SWING"}[k], 1)
 
 # ---------------------------------------------------------------- rewards
 var drift_acc := 0.0
@@ -955,6 +1118,7 @@ func _drift_air_rewards(dt: float) -> void:
 	elif drift_acc > 0.0 and player.drift_t <= 0.0:
 		if drift_acc > 1.2:
 			toast.emit("DRIFT +$%d" % int(drift_cash), 1)
+			_combo_add(1)
 		st["cash"] += int(drift_cash)
 		drift_acc = 0.0
 		drift_cash = 0.0
@@ -980,6 +1144,8 @@ func _drift_air_rewards(dt: float) -> void:
 			score += float(cash) * 4.0
 			player.nitro = minf(float(player.stats["nitro_cap"]), player.nitro + 10.0 + tr * 25.0)
 			Sfx.play("stinger" if tr > 0 else "overtake", 0.9)
+			if tr > 0:
+				_combo_add(tr)
 			toast.emit(("%dx TRICK  +$%d" % [tr, cash]) if tr > 0 else "AIR TIME  +$%d" % cash, 1)
 
 func _rewards(dt: float) -> void:
@@ -998,8 +1164,7 @@ func _rewards(dt: float) -> void:
 			var gap := absf(c.x - player.x) - c.half_wid
 			if gap < 1.35:
 				st["near"] += 1
-				combo = mini(combo + 1, 6)
-				combo_t = 3.5
+				_combo_add(1)
 				var pts := 100.0 * combo * (1.5 if gap < 0.7 else 1.0)
 				score += pts
 				player.nitro = minf(float(player.stats["nitro_cap"]), player.nitro + 9.0)
@@ -1061,13 +1226,18 @@ func _finish_checks(dt: float) -> void:
 		_end(false, "WRECKED", true)
 		return
 	match mode:
-		"time", "highway", "survival":
+		"boss":
+			if boss != null and boss.has_meta("ko"):
+				_end(true, "BOSS DOWN", false)
+		"time", "highway", "survival", "chase":
 			time_left -= dt
-			if mode == "survival" and time_left <= 0.0:
+			if mode == "chase" and time_left <= 0.0:
+				_end(true, "ESCAPED THE POLICE", false)
+			elif mode == "survival" and time_left <= 0.0:
 				_end(true, "SURVIVED", false)
 			elif mode == "highway" and score >= float(def["score_goal"]):
 				_end(true, "SCORE REACHED", false)
-			elif mode != "survival" and time_left <= 0.0:
+			elif mode != "survival" and mode != "chase" and time_left <= 0.0:
 				_end(false, "TIME UP", true)
 		"knockout":
 			elim_t -= dt
@@ -1114,6 +1284,17 @@ func _on_player_finish() -> void:
 			_end(time_left > 0.0, "FINISHED", false)
 		"survival":
 			_end(true, "SURVIVED", false)
+		"chase":
+			_end(true, "ESCAPED THE POLICE", false)
+		"boss":
+			var ko2 := boss != null and boss.has_meta("ko")
+			if ko2:
+				_end(true, "BOSS DOWN", false)
+			elif boss != null and not (boss.finished and boss.finish_time < player.finish_time):
+				boss_outran = true
+				_end(true, "OUTRAN THE BOSS", false)
+			else:
+				_end(false, "BOSS BEAT YOU", false)
 		"highway":
 			var ok := score >= float(def["score_goal"])
 			_end(ok, "SCORE REACHED" if ok else "SCORE TOO LOW", false)
@@ -1146,11 +1327,16 @@ func _end(win: bool, reason: String, game_over: bool) -> void:
 		match mode:
 			"race", "rival":
 				mult = [1.0, 0.65, 0.45][clampi(place - 1, 0, 2)]
+			"boss":
+				mult = 0.5 if boss_outran else 1.0
 			_:
 				mult = 1.0
 	elif mode == "race" or mode == "rival":
 		mult = 0.2 if place <= 4 else 0.1
-	var bonus := int(st["cash"]) + int(st["takedowns"]) * 80 + int(st["near"]) * 15 + int(st["overtakes"]) * 40
+	var daily_done: bool = bool(def.get("daily", false)) and int(Save.d["daily"].get("claimed", 0)) == int(def.get("date", 0))
+	if daily_done:
+		mult *= 0.15
+	var bonus := int(st["cash"]) + int(st["takedowns"]) * 80 + int(st["near"]) * 15 + int(st["overtakes"]) * 40 + int(st["cops"]) * 60 + (int(st["combo"]) - 1) * 25
 	var money := int(base * mult) + bonus
 	var first_clear: bool = not Save.d["done"].has(def["id"])
 	var rep := 0
@@ -1158,8 +1344,200 @@ func _end(win: bool, reason: String, game_over: bool) -> void:
 		rep = int(def["rep"]) if first_clear else int(def["rep"]) / 3
 	var res := {"win": win, "reason": reason, "place": place, "time": time, "money": money, "rep": rep,
 		"mode": mode, "id": def["id"], "name": def["name"], "stats": st.duplicate(), "score": int(score),
-		"first_clear": first_clear, "game_over": game_over, "shortcut": shortcut_taken, "bonus": bonus, "base": int(base * mult)}
+		"first_clear": first_clear, "game_over": game_over, "shortcut": shortcut_taken, "bonus": bonus, "base": int(base * mult),
+		"daily": def.get("daily", false), "daily_repeat": daily_done, "date": int(def.get("date", 0)), "ghost_id": ghost_id,
+		"ghost": rec_pts if (win and player.finished and not game_over and ghost_id != "") else [], "ftime": player.finish_time}
 	ended.emit(res)
+
+# ---------------------------------------------------------------- police chase
+func _spawn_cop() -> void:
+	var c := _get_car("cop")
+	c.s = player.s - rng.randf_range(55.0, 90.0)
+	c.x = Track.LANES[rng.randi() % 4]
+	c.v = player.v + 6.0
+	c.hp = 40.0 + 6.0 * heat
+	c.vx = 0.0
+	c.cool = 1.2
+	c.wreck_t = 0.0
+	c.wreck_ang = 0.0
+	c.visible = true
+	cops.append(c)
+
+func _update_cops(dt: float) -> void:
+	if mode != "chase" or state != RState.RACING:
+		return
+	heat = clampi(1 + int(time / 15.0), 1, 5)
+	cop_t -= dt
+	var live := 0
+	for c in cops:
+		if c.wreck_t <= 0.0:
+			live += 1
+	if cop_t <= 0.0 and live < 1 + heat:
+		_spawn_cop()
+		cop_t = maxf(2.5, 8.0 - heat * 1.2)
+	var near_d := 999.0
+	var i := cops.size() - 1
+	while i >= 0:
+		var c := cops[i]
+		if _step_cop(c, dt):
+			_release_car(c)
+			cops.remove_at(i)
+		else:
+			near_d = minf(near_d, absf(c.s - player.s))
+		i -= 1
+	siren_t -= dt
+	if siren_t <= 0.0 and near_d < 300.0:
+		siren_t = 1.6
+		Sfx.play("siren", clampf(1.0 - near_d / 300.0, 0.12, 0.5))
+
+func _step_cop(c: TrafficCar, dt: float) -> bool:
+	if c.wreck_t > 0.0:
+		c.wreck_t -= dt
+		c.v = move_toward(c.v, 0.0, 25.0 * dt)
+		c.s += c.v * dt
+		c.x += c.vx * dt
+		c.vx *= 0.97
+		c.wreck_ang += 9.0 * dt
+		c.place_in_world(track)
+		return c.wreck_t <= 0.0
+	var ds := player.s - c.s
+	var tv := player.v * 1.04
+	if ds > 8.0:
+		tv = player.v * 1.07 + 5.0
+	elif ds < -8.0:
+		tv = player.v * 0.7
+	c.v = move_toward(c.v, tv, 22.0 * dt)
+	c.s += c.v * dt
+	c.x += c.vx * dt
+	c.vx *= pow(0.05, dt)
+	c.x = clampf(move_toward(c.x, player.x, (3.5 + heat * 0.5) * dt), -7.2, 7.2)
+	c.cool -= dt
+	if ds > 280.0:
+		c.s = player.s - 80.0
+		c.v = player.v
+	if c.cool <= 0.0 and player.crash_t <= 0.0 and player.invuln <= 0.0 and absf(ds) < c.half_len + 1.3 and absf(player.x - c.x) < c.half_wid + 0.7:
+		var sg := signf(player.x - c.x)
+		if sg == 0.0:
+			sg = 1.0
+		if not god:
+			player.damage(9.0 + heat * 1.5, float(diff["dmg_taken"]))
+		player.vx += sg * 9.0
+		player.v *= 0.92
+		c.vx -= sg * 6.0
+		c.cool = 1.4
+		st["rams"] += 1
+		combo = 1
+		shake = maxf(shake, 0.6)
+		Sfx.play("crash", 0.8)
+		toast.emit("RAMMED!", 2)
+	c.place_in_world(track)
+	c.flash(time)
+	return false
+
+func _hit_cop(c: TrafficCar, dmg: float, sd: int, kn: float, wid: String) -> void:
+	c.hp -= dmg
+	c.vx += sd * kn * 0.6
+	c.v *= 0.85
+	st["hits"] += 1
+	_hit_fx(player.global_position + Vector3(sd * 2.0, 0, -1.0), wid)
+	_combo_add(1)
+	if c.hp <= 0.0 and c.wreck_t <= 0.0:
+		c.wreck_t = 1.4
+		c.vx = sd * 8.0
+		st["cops"] += 1
+		st["cash"] += 150
+		score += 500.0 * combo
+		_combo_add(2)
+		toast.emit("COP DOWN  +$150", 3)
+		Sfx.play("crunch", 1.0)
+		shake = 0.8
+		_slowmo(0.5, 0.3)
+		if rng.randf() < 0.4:
+			var k: String = ["bat", "chain", "pipe"][rng.randi() % 3]
+			_add_pickup(c.s + 10.0, clampf(c.x, -6.5, 6.5), k)
+
+# ---------------------------------------------------------------- ghost
+func _setup_ghost() -> void:
+	if mode in ["chase", "survival"]:
+		return
+	ghost_id = str(def.get("ghost_id", def["id"]))
+	var g: Dictionary = Save.d["ghost"].get(ghost_id, {})
+	var pts: Array = g.get("pts", [])
+	if pts.size() < 8:
+		return
+	ghost_pts = pts
+	ghost_time = float(g.get("time", 0.0))
+	print("[ghost] loaded ", ghost_id, " samples=", pts.size() / 2)
+	ghost_node = Node3D.new()
+	var ps: PackedScene = load("res://assets/bikes/%s.glb" % Racer.BIKE_IDS[clampi(player.body_style, 0, 4)])
+	var bike := ps.instantiate()
+	ghost_node.add_child(bike)
+	var gm := StandardMaterial3D.new()
+	gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	gm.albedo_color = Color(0.4, 0.9, 1.0, 0.35)
+	gm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	for mi in bike.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).material_override = gm
+		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(ghost_node)
+	ghost_node.visible = false
+
+func _ghost_step(dt: float) -> void:
+	if state == RState.RACING and not done:
+		rec_t += dt
+		if rec_t >= 0.1:
+			rec_t -= 0.1
+			rec_pts.append(int(player.s * 10.0))
+			rec_pts.append(int(player.x * 100.0))
+	if ghost_node == null:
+		return
+	var gi := time / 0.1
+	var i := int(gi)
+	var n := ghost_pts.size() / 2
+	if state != RState.RACING or i + 1 >= n:
+		ghost_node.visible = false
+		return
+	var f := gi - float(i)
+	var gs := lerpf(float(ghost_pts[i * 2]), float(ghost_pts[i * 2 + 2]), f) / 10.0
+	var gx := lerpf(float(ghost_pts[i * 2 + 1]), float(ghost_pts[i * 2 + 3]), f) / 100.0
+	ghost_gap = gs - player.s
+	ghost_node.visible = absf(ghost_gap) < VIEW
+	ghost_node.position = track.pos_at(gs, gx)
+	ghost_node.rotation = Vector3(atan(track.slope_at(gs)), track.yaw_at(gs), 0.0)
+
+# ---------------------------------------------------------------- headless kick proof
+func _kicktest() -> void:
+	kt_done = true
+	var r: Racer = null
+	for o in racers:
+		if o != player:
+			r = o
+			break
+	if r == null:
+		print("[kicktest] FAIL no rival")
+		get_tree().quit(1)
+		return
+	var cases := [[1.5, 2.0, true], [-3.5, -3.0, true], [4.0, 4.2, true], [-4.0, 0.5, true], [7.0, 0.0, false], [0.0, 7.5, false]]
+	var ok := true
+	for cs in cases:
+		for o in racers:
+			o.atk_cd = 0.0
+		r.s = player.s + float(cs[0])
+		r.x = player.x + float(cs[1])
+		r.crash_t = 0.0
+		r.invuln = 0.0
+		r.health = r.max_health
+		r.finished = false
+		var hp0 := r.health
+		var vx0 := r.vx
+		_melee(player, 0, true)
+		var hit := r.health < hp0
+		var pass_ok := hit == bool(cs[2])
+		ok = ok and pass_ok
+		print("[kicktest] dsx=%.1f dx=%.1f hit=%s hp %.1f->%.1f dvx=%.1f %s" % [cs[0], cs[1], hit, hp0, r.health, r.vx - vx0, "ok" if pass_ok else "BAD"])
+	print("[kicktest] ", "PASS" if ok else "FAIL")
+	get_tree().quit(0 if ok else 1)
 
 # ---------------------------------------------------------------- camera
 func _update_camera(dt: float, snap: bool) -> void:

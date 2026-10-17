@@ -10,6 +10,7 @@ const KINDS := {
 	"bus": {"len": 11.5, "wid": 2.6, "spd": [15.0, 22.0], "w": 6},
 	"auto": {"len": 2.6, "wid": 1.4, "spd": [12.0, 18.0], "w": 10},
 	"bike": {"len": 2.0, "wid": 0.8, "spd": [26.0, 36.0], "w": 8},
+	"cop": {"len": 4.5, "wid": 1.9, "spd": [28.0, 36.0], "w": 0},
 }
 const PALETTE := [Color(0.8, 0.15, 0.15), Color(0.15, 0.35, 0.75), Color(0.85, 0.85, 0.85), Color(0.2, 0.2, 0.22), Color(0.85, 0.7, 0.15),
 	Color(0.2, 0.55, 0.3), Color(0.6, 0.6, 0.65), Color(0.9, 0.5, 0.15)]
@@ -29,6 +30,13 @@ var half_wid := 0.9
 var weave_ph := 0.0
 var prev_ds := 0.0
 var passed_flag := false
+var hp := 40.0
+var vx := 0.0
+var cool := 0.0
+var wreck_t := 0.0
+var wreck_ang := 0.0
+var _lr: StandardMaterial3D
+var _lb: StandardMaterial3D
 
 static func pick_kind(rng: RandomNumberGenerator) -> String:
 	var total := 0
@@ -56,13 +64,15 @@ func build(k: String, rng: RandomNumberGenerator) -> void:
 	var dark := Color(0.05, 0.05, 0.05)
 	_brakes.clear()
 	match k:
-		"car", "suv":
-			var h := 0.62 if k == "car" else 0.85
+		"car", "suv", "cop":
+			if k == "cop":
+				col = Color(0.93, 0.93, 0.96)
+			var h := 0.85 if k == "suv" else 0.62
 			_box(Vector3(W, h, L), Vector3(0, 0.38 + h * 0.5, 0), col)
-			var cab_h := 0.55 if k == "car" else 0.62
-			var cab_l := L * (0.5 if k == "car" else 0.62)
-			_box(Vector3(W * 0.88, cab_h, cab_l), Vector3(0, 0.38 + h + cab_h * 0.5, 0.18 if k == "car" else 0.35), glass)
-			_box(Vector3(W * 0.9, 0.06, cab_l * 0.9), Vector3(0, 0.38 + h + cab_h + 0.02, 0.18 if k == "car" else 0.35), col.darkened(0.1))
+			var cab_h := 0.62 if k == "suv" else 0.55
+			var cab_l := L * (0.62 if k == "suv" else 0.5)
+			_box(Vector3(W * 0.88, cab_h, cab_l), Vector3(0, 0.38 + h + cab_h * 0.5, 0.35 if k == "suv" else 0.18), glass)
+			_box(Vector3(W * 0.9, 0.06, cab_l * 0.9), Vector3(0, 0.38 + h + cab_h + 0.02, 0.35 if k == "suv" else 0.18), col.darkened(0.1))
 			_box(Vector3(W * 0.96, 0.18, 0.2), Vector3(0, 0.42, -L * 0.5), dark)
 			_box(Vector3(W * 0.96, 0.18, 0.2), Vector3(0, 0.42, L * 0.5), dark)
 		"van":
@@ -90,6 +100,12 @@ func build(k: String, rng: RandomNumberGenerator) -> void:
 			_box(Vector3(0.12, 0.3, 0.9), Vector3(0, 0.88, -0.2), dark)
 			_box(Vector3(0.32, 0.65, 0.3), Vector3(0, 1.28, 0.15), Color(0.15, 0.15, 0.18))
 			_box(Vector3(0.22, 0.2, 0.22), Vector3(0, 1.75, 0.15), Color(0.9, 0.5, 0.1))
+	if k == "cop":
+		_box(Vector3(W + 0.02, 0.16, L * 0.3), Vector3(0, 0.62, 0), Color(0.1, 0.2, 0.55))
+		_lr = _light(Color(1, 0.1, 0.1))
+		_lb = _light(Color(0.15, 0.3, 1))
+		_box(Vector3(0.7, 0.18, 0.3), Vector3(-0.4, 1.7, 0.2), Color.WHITE).material_override = _lr
+		_box(Vector3(0.7, 0.18, 0.3), Vector3(0.4, 1.7, 0.2), Color.WHITE).material_override = _lb
 	if k == "bike":
 		for sz in [-0.4, 0.4]:
 			_box(Vector3(0.14, 0.62, 0.62), Vector3(0, 0.31, L * sz), dark)
@@ -160,6 +176,21 @@ func build(k: String, rng: RandomNumberGenerator) -> void:
 	v = base_v
 	weave_ph = rng.randf() * 6.28
 
+func _light(c: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = c
+	m.emission_enabled = true
+	m.emission = c
+	m.emission_energy_multiplier = 3.0
+	return m
+
+func flash(t: float) -> void:
+	if _lr == null:
+		return
+	var on := int(t * 7.0) % 2 == 0
+	_lr.emission_energy_multiplier = 5.0 if on else 0.3
+	_lb.emission_energy_multiplier = 0.3 if on else 5.0
+
 func _box(size: Vector3, p: Vector3, c: Color) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	var bm := BoxMesh.new()
@@ -196,4 +227,4 @@ func step(dt: float, others: Array) -> void:
 
 func place_in_world(track: Track) -> void:
 	position = track.pos_at(s, x)
-	rotation = Vector3(atan(track.slope_at(s)), track.yaw_at(s), 0.0)
+	rotation = Vector3(atan(track.slope_at(s)), track.yaw_at(s) + wreck_ang, sin(wreck_ang * 0.5) * 0.25 if wreck_t > 0.0 else 0.0)

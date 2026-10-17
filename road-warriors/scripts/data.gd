@@ -64,7 +64,42 @@ const MODES := {
 	"survival": "Survival - outlast the pack",
 	"highway": "Highway Run - score near misses",
 	"revenge": "Revenge - take down the rider who wrecked you",
+	"boss": "Boss Fight - beat the region boss",
+	"chase": "Police Chase - outlast the cops",
 }
+
+const PAINTS := [Color(0.10, 0.45, 0.28), Color(0.80, 0.15, 0.15), Color(0.95, 0.80, 0.10), Color(0.90, 0.42, 0.12), Color(0.15, 0.35, 0.80),
+	Color(0.55, 0.20, 0.75), Color(0.95, 0.35, 0.65), Color(0.12, 0.12, 0.14), Color(0.92, 0.92, 0.94), Color(0.10, 0.75, 0.80)]
+const DECALS := ["", "RW", "13", "X", "99", "!!"]
+
+static func daily_key() -> int:
+	var dt := Time.get_date_dict_from_system()
+	return int(dt["year"]) * 10000 + int(dt["month"]) * 100 + int(dt["day"])
+
+## Same track for everyone on the same calendar day.
+static func daily_def() -> Dictionary:
+	var key := daily_key()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = key
+	var mode: String = ["race", "time", "highway", "knockout", "race", "time"][rng.randi() % 6]
+	var ln := 5500 + (rng.randi() % 4) * 500
+	var rivals: Array = []
+	var archs := ARCH.keys()
+	if mode == "race" or mode == "knockout":
+		for i in 4 + rng.randi() % 2:
+			rivals.append(archs[rng.randi() % archs.size()])
+	var d := {"id": "daily", "ghost_id": "daily-%d" % key, "name": "Daily Challenge", "mode": mode, "len": ln, "theme": rng.randi() % 3,
+		"seed": 300 + rng.randi() % 600, "req": 0, "rivals": rivals, "traffic": 0.3 + rng.randf() * 0.5, "reward": 2200, "rep": 0,
+		"shortcut": false, "need_place": 3 if mode == "race" else 0, "daily": true, "date": key,
+		"tod": ["day", "dusk", "night"][rng.randi() % 3], "weather": ["clear", "clear", "rain", "fog", "dust"][rng.randi() % 5]}
+	match mode:
+		"time":
+			d["target"] = int(ln / 48.0)
+		"highway":
+			d["score_goal"] = 3500
+			d["limit"] = 150
+	d["blurb"] = "Same track for every rider today. One clear a day pays a bonus."
+	return d
 
 # seg: [length, curve(rad/m, + = left), slope amp, feature, env]; generator fills in when "segs" is absent.
 const RACES := [
@@ -115,7 +150,22 @@ const RACES := [
 		"blurb": "Night jumps over city traffic. Drifts, near misses and big air all feed the score.", "shortcut": false, "need_place": 0},
 	{"id": "r16", "name": "Pink City Sunset Cruise", "mode": "time", "len": 10900, "theme": 1, "seed": 251, "req": 0, "route": "jaipur", "cruise": 15.0, "target": 900,
 		"rivals": [], "traffic": 0.12, "reward": 1500, "rep": 20,
-		"blurb": "A slow golden-hour ride on the real roads from Hawa Mahal past Jal Mahal to Amber. Speed capped, no rivals. Just look around.", "shortcut": false, "need_place": 0}
+		"blurb": "A slow golden-hour ride on the real roads from Hawa Mahal past Jal Mahal to Amber. Speed capped, no rivals. Just look around.", "shortcut": false, "need_place": 0},
+	{"id": "r17", "name": "Boss: Bhairon Singh", "mode": "boss", "len": 9000, "theme": 0, "seed": 263, "req": 0, "boss": 0,
+		"boss_name": "Bhairon Singh", "boss_color": Color(0.35, 0.08, 0.06), "boss_hp": 240.0, "rivals": ["heavy", "balanced", "speed"],
+		"traffic": 0.5, "reward": 3500, "rep": 60,
+		"blurb": "Countryside boss. Big, mean, three times your health. Knock him off the bike (or outrun him for half pay).", "shortcut": true, "need_place": 0},
+	{"id": "r18", "name": "Boss: Neon Queen Zara", "mode": "boss", "len": 9000, "theme": 1, "seed": 277, "req": 0, "boss": 0,
+		"boss_name": "Neon Queen Zara", "boss_color": Color(0.7, 0.1, 0.55), "boss_hp": 260.0, "rivals": ["aggressive", "speed", "defensive"],
+		"traffic": 0.7, "reward": 4200, "rep": 70,
+		"blurb": "City boss, fast and ruthless under the neon. Take her down before the flyover ends.", "shortcut": false, "need_place": 0},
+	{"id": "r19", "name": "Boss: Sikandar of the Dunes", "mode": "boss", "len": 9500, "theme": 2, "seed": 283, "req": 0, "boss": 0,
+		"boss_name": "Sikandar", "boss_color": Color(0.9, 0.7, 0.1), "boss_hp": 290.0, "rivals": ["heavy", "aggressive", "balanced"],
+		"traffic": 0.5, "reward": 5000, "rep": 80,
+		"blurb": "Desert boss with a chain and a grudge. The toughest rider on the map.", "shortcut": true, "need_place": 0},
+	{"id": "r20", "name": "Police Pursuit", "mode": "chase", "len": 11000, "theme": 1, "seed": 293, "req": 0, "survive": 75,
+		"rivals": [], "traffic": 0.5, "reward": 3200, "rep": 50,
+		"blurb": "Sirens behind you and the heat keeps rising. Survive 75 seconds. Cops ram you; kick them off the road for cash.", "shortcut": false, "need_place": 0}
 ]
 
 static func bike(id: String) -> Dictionary:

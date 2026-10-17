@@ -304,7 +304,45 @@ func _leg(side: int) -> Node3D:
 	p.rotation.x = -0.55
 	rider.add_child(p)
 	_box(p, Vector3(0.15, 0.52, 0.15), Vector3(0, -0.26, 0), Color(0.1, 0.12, 0.2), 0.8)
+	_box(p, Vector3(0.2, 0.14, 0.34), Vector3(0, -0.55, -0.06), Color(0.95, 0.5, 0.1), 0.6)
 	return p
+
+func apply_paint(c: Color, decal: String) -> void:
+	for mi in _meshes:
+		var n := String(mi.name)
+		if not (n.begins_with("body_paint") or n.begins_with("body_accent")):
+			continue
+		var m0 := mi.get_active_material(0)
+		if c.a > 0.0 and m0 is StandardMaterial3D:
+			var m := (m0 as StandardMaterial3D).duplicate() as StandardMaterial3D
+			m.albedo_color = c if n.begins_with("body_paint") else c.darkened(0.45)
+			mi.set_surface_override_material(0, m)
+		if decal != "" and n.begins_with("body_paint"):
+			var bb := mi.get_aabb()
+			for sd in [-1, 1]:
+				var lb := Label3D.new()
+				lb.text = decal
+				lb.font_size = 96
+				lb.pixel_size = 0.0035
+				lb.modulate = Color(1, 1, 1)
+				lb.outline_size = 12
+				lb.outline_modulate = Color(0, 0, 0)
+				lb.double_sided = false
+				lb.position = bb.get_center() + Vector3(sd * (bb.size.x * 0.5 + 0.02), 0.0, 0.0)
+				lb.rotation.y = sd * PI * 0.5
+				mi.add_child(lb)
+			break
+
+func make_ghost() -> void:
+	var gm := StandardMaterial3D.new()
+	gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	gm.albedo_color = Color(0.4, 0.9, 1.0, 0.35)
+	gm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	for mi in _meshes:
+		mi.material_override = gm
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	glow_tail.visible = false
 
 func set_weapon(id: String, dur: int) -> void:
 	weapon = id
@@ -557,10 +595,13 @@ func place_in_world(track: Track, dt: float) -> void:
 		a.rotation = Vector3(-1.15, 0, 0)
 	for l in [leg_l, leg_r]:
 		l.rotation = Vector3(-0.55, 0, 0)
+		l.scale = Vector3.ONE
 	if sw > 0.0:
 		if anim_kick:
 			var lg := leg_r if anim_side > 0 else leg_l
-			lg.rotation = Vector3(-0.55 + sw * 0.4, 0, anim_side * sw * 1.4)
+			lg.visible = true
+			lg.rotation = Vector3(-0.55 + sw * 0.35, 0, anim_side * sw * 1.75)
+			lg.scale = Vector3(1.0 + sw * 0.5, 1.0 + sw * 1.0, 1.0 + sw * 0.5)
 		else:
 			ar.rotation = Vector3(-1.15 + sw * 1.0, 0, anim_side * sw * 1.55)
 	var fl := hit_flash > 0.0
