@@ -58,23 +58,24 @@ var bump_t := 0.0
 var score := 0.0
 
 var model: Node3D
-var spr: Sprite3D
-var spr_empty: Sprite3D
+var bike3: Node3D
+var rider_mesh: Node3D
+var wheel_f: Node3D
+var wheel_r: Node3D
+var _meshes: Array[MeshInstance3D] = []
+var _flash_mat: StandardMaterial3D
+var _flashing := false
 var glow_tail: MeshInstance3D
 var flames: Array[MeshInstance3D] = []
 var body_parts: Array[Node3D] = []
-var _frame := -1
 var _bob := 0.0
 const BIKE_IDS := ["thunderbolt", "nightbreaker", "scrambler", "commuter", "streak"]
-const LEAN_DEG := [-30, -25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
-const SPR_PX := 2.5 / 384.0
-const SPR_Y := 0.80
+const BWR := [0.33, 0.30, 0.38, 0.27, 0.30]
 # per-bike: shoulder height, shoulder z, tail light (y,z), exhaust x list + (y,z)
 const BSH := [1.50, 1.33, 1.61, 1.41, 1.33]
 const BSZ := [0.15, 0.28, 0.09, 0.16, 0.12]
-const BTAIL := [Vector2(0.34, 0.06), Vector2(0.26, 0.06), Vector2(0.48, 0.06), Vector2(0.34, 0.06), Vector2(0.52, 0.06)]
-const BEXH := [[0.20], [-0.21, 0.21], [0.23], [0.17], [0.0]]
-const BEXY := [Vector2(0.2, 0.06), Vector2(0.25, 0.06), Vector2(0.69, 0.06), Vector2(0.24, 0.06), Vector2(0.47, 0.06)]
+const BTAIL := [Vector3(0, 0.50, 1.06), Vector3(0, 0.44, 1.12), Vector3(0, 0.66, 1.10), Vector3(0, 0.46, 0.88), Vector3(0, 0.72, 1.22)]
+const BEXH := [[Vector3(0.20, 0.36, 1.05)], [Vector3(-0.21, 0.40, 0.99), Vector3(0.21, 0.40, 0.99)], [Vector3(0.23, 0.845, 1.0)], [Vector3(0.17, 0.36, 0.86)], [Vector3(0, 0.625, 1.0)]]
 static var _tex := {}
 static var _glow_tex: GradientTexture2D
 
@@ -125,18 +126,6 @@ func _glow(c: Color, size: float, pos: Vector3) -> MeshInstance3D:
 	model.add_child(mi)
 	return mi
 
-func _sprite(path: String) -> Sprite3D:
-	var sp := Sprite3D.new()
-	sp.texture = tex(path)
-	sp.pixel_size = SPR_PX
-	sp.shaded = false
-	sp.double_sided = true
-	sp.alpha_cut = SpriteBase3D.ALPHA_CUT_OPAQUE_PREPASS
-	sp.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
-	sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	sp.position = Vector3(0, SPR_Y, 0)
-	model.add_child(sp)
-	return sp
 var torso: Node3D
 var arm_l: Node3D
 var arm_r: Node3D
@@ -227,15 +216,21 @@ func _build() -> void:
 	if spray != null:
 		spray.position = Vector3(0, 0.12, 0.7)
 	var id: String = BIKE_IDS[clampi(body_style, 0, 4)]
-	spr = _sprite("res://assets/bikes/%s_3.png" % id)
-	spr_empty = _sprite("res://assets/bikes/%s_empty_6.png" % id)
-	spr_empty.visible = false
-	var tp: Vector2 = BTAIL[body_style]
-	glow_tail = _glow(Color(1.0, 0.1, 0.05, 0.85), 0.28, Vector3(0, tp.x, tp.y))
-	var ey: Vector2 = BEXY[body_style]
-	for x in BEXH[body_style]:
-		var f := _glow(Color(1.0, 0.55, 0.15, 0.0), 1.1, Vector3(x, ey.x, ey.y))
-		flames.append(f)
+	var ps: PackedScene = load("res://assets/bikes/%s.glb" % id)
+	bike3 = ps.instantiate()
+	model.add_child(bike3)
+	rider_mesh = bike3.find_child("rider", true, false)
+	wheel_f = bike3.find_child("wheel_f", true, false)
+	wheel_r = bike3.find_child("wheel_r", true, false)
+	for n in bike3.find_children("*", "MeshInstance3D", true, false):
+		_meshes.append(n)
+	glow_tail = _glow(Color(1.0, 0.1, 0.05, 0.7), 0.3, BTAIL[body_style] + Vector3(0, 0, 0.05))
+	for ep in BEXH[body_style]:
+		flames.append(_glow(Color(1.0, 0.55, 0.15, 0.0), 1.1, ep + Vector3(0, 0, 0.15)))
+	_flash_mat = StandardMaterial3D.new()
+	_flash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_flash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_flash_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	rider = Node3D.new()
 	model.add_child(rider)
 	var lean_fwd := -0.5 if body_style in [1, 2] else -0.3
@@ -275,6 +270,10 @@ func _build() -> void:
 	shadow.position = Vector3(0, 0.03, 0.0)
 	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(shadow)
+	for p in body_parts:
+		p.visible = false
+	arm_l.visible = false
+	arm_r.visible = false
 	set_weapon("punch", 0)
 
 func _arm(side: int) -> Node3D:
@@ -478,22 +477,19 @@ func place_in_world(track: Track, dt: float) -> void:
 	if crash_t <= 0.0:
 		var target_roll := -vx * 0.045 + track.curve_at(s) * v * 1.4
 		roll = lerpf(roll, clampf(target_roll, -0.7, 0.7), clampf(dt * 9.0, 0.0, 1.0))
-		var idx := clampi(roundi((-rad_to_deg(roll) + 30.0) / 5.0), 0, 12)
-		if idx != _frame:
-			_frame = idx
-			spr.texture = tex("res://assets/bikes/%s_%d.png" % [BIKE_IDS[body_style], idx])
-		model.rotation = Vector3(0, 0, roll + deg_to_rad(LEAN_DEG[idx]))
+		model.rotation = Vector3(0, 0, roll)
 	_bob += dt * (20.0 + v * 0.5)
 	if sparks != null:
 		sparks.emitting = (scrape or crash_t > 0.0) and v > 8.0
 	if spray != null:
 		spray.emitting = v > 18.0 and crash_t <= 0.0
-	spr.position.y = SPR_Y + sin(_bob) * 0.006 * clampf(v / 40.0, 0.0, 1.0)
-	spr.rotation.x = lerpf(spr.rotation.x, -0.07 if nitro_on else 0.0, clampf(dt * 6.0, 0.0, 1.0))
-	spr_empty.position.y = spr.position.y
+	bike3.position.y = sin(_bob) * 0.006 * clampf(v / 40.0, 0.0, 1.0)
+	bike3.rotation.x = lerpf(bike3.rotation.x, 0.06 if nitro_on else 0.0, clampf(dt * 6.0, 0.0, 1.0))
+	var spin: float = v / float(BWR[body_style]) * dt
+	wheel_f.rotation.x -= spin
+	wheel_r.rotation.x -= spin
 	var crashed := crash_t > 0.0
-	spr.visible = not crashed
-	spr_empty.visible = crashed
+	rider_mesh.visible = not crashed
 	for p in body_parts:
 		p.visible = crashed
 	for f in flames:
@@ -517,8 +513,13 @@ func place_in_world(track: Track, dt: float) -> void:
 			lg.rotation = Vector3(-0.55 + sw * 0.4, 0, anim_side * sw * 1.4)
 		else:
 			ar.rotation = Vector3(-1.15 + sw * 1.0, 0, anim_side * sw * 1.55)
-	var hf := 1.0 + hit_flash * 3.0
-	spr.modulate = Color(hf, hf, hf, 1.0)
+	var fl := hit_flash > 0.0
+	if fl:
+		_flash_mat.albedo_color = Color(1, 1, 1, clampf(hit_flash * 1.6, 0.0, 0.7))
+	if fl != _flashing:
+		_flashing = fl
+		for mi in _meshes:
+			mi.material_overlay = _flash_mat if fl else null
 	if hit_flash > 0.0:
 		head_mat.emission_enabled = true
 		head_mat.emission = Color(1, 1, 1)

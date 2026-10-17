@@ -29,7 +29,7 @@ func _ready() -> void:
 
 func defaults() -> Dictionary:
 	return {"money": 600, "rep": 0, "owned": ["dustrunner"], "bike": "dustrunner", "upg": {}, "done": {}, "best": {},
-		"set": {"sfx": 0.8, "music": 0.5, "diff": 1, "shake": 1.0, "autothrottle": -1, "debug": false, "bind": {}, "tutorial": true}}
+		"set": {"sfx": 0.8, "music": 0.5, "diff": 1, "shake": 1.0, "amb": 1.0, "quality": 1, "fps": 60, "autothrottle": -1, "debug": false, "bind": {}, "tutorial": true}}
 
 func _merge(base: Dictionary, over: Dictionary) -> void:
 	for k in over:

@@ -60,6 +60,9 @@ func _loop(n: String) -> AudioStreamPlayer:
 	add_child(p)
 	return p
 
+func amb_vol() -> float:
+	return float(Save.setting("amb"))
+
 func sfx_vol() -> float:
 	return float(Save.setting("sfx"))
 
@@ -101,9 +104,9 @@ func engine(on: bool, speed01 := 0.0, boost := false) -> void:
 			wind_p.play()
 		elif not on and wind_p.playing:
 			wind_p.stop()
-		wind_p.volume_db = linear_to_db(maxf(0.001, 0.5 * wv * sfx_vol()))
+		wind_p.volume_db = linear_to_db(maxf(0.001, 0.5 * wv * sfx_vol() * amb_vol()))
 		wind_p.pitch_scale = 0.8 + speed01 * 0.6
-	engine_p.volume_db = linear_to_db(maxf(0.001, 0.35 * sfx_vol()))
+	engine_p.volume_db = linear_to_db(maxf(0.001, 0.35 * sfx_vol() * amb_vol()))
 	var nit_on := on and boost
 	if nit_on and not nitro_p.playing:
 		nitro_p.play()
@@ -137,7 +140,7 @@ func rain(on: bool) -> void:
 		rain_p.play()
 	elif not on and rain_p.playing:
 		rain_p.stop()
-	rain_p.volume_db = linear_to_db(maxf(0.001, 0.22 * sfx_vol()))
+	rain_p.volume_db = linear_to_db(maxf(0.001, 0.22 * sfx_vol() * amb_vol()))
 
 func tunnel(on: bool) -> void:
 	if reverb != null:

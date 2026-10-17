@@ -22,9 +22,9 @@ def mat(name, col, metal=0.0, rough=0.5, emit=0.0):
 
 class Rig:
     def __init__(s):
-        s.root = bpy.data.objects.new('bike', None); bpy.context.scene.collection.objects.link(s.root)
+        s.group = 'body'; s.items = []
     def fin(s, o, m, bev=0.0):
-        o.data.materials.append(m); o.parent = s.root
+        o.data.materials.append(m); s.items.append((o, s.group))
         for p in o.data.polygons: p.use_smooth = True
         if bev:
             b = o.modifiers.new('b', 'BEVEL'); b.width = bev; b.segments = 3
@@ -69,6 +69,7 @@ def build(P):
     WR, WB, TR, TRf = P['wr'], P['wb'], P['tire'], P.get('tire_f', P['tire'])
     # wheels
     for y, tw, hub in ((-WB, TR, 0.07), (WB, TRf, 0.06)):
+        r.group = 'wheel_r' if y < 0 else 'wheel_f'
         r.torus((0, y, WR), WR - tw, tw, rub)
         r.torus((0, y, WR), WR - 2 * tw, 0.014, chrome if P['spokes'] else alu)
         r.cyl((-hub, y, WR), (hub, y, WR), 0.065, alu)
@@ -84,6 +85,7 @@ def build(P):
             for k in range(22):
                 a = k * 2 * math.pi / 22
                 r.box((0, y + (WR - 0.5 * tw) * math.sin(a), WR + (WR - 0.5 * tw) * math.cos(a)), (2 * tw * 1.1, 0.03, 0.02), rub, (a, 0, 0), 0.004)
+    r.group = 'body'
     # fenders
     fw = P['fender_w']
     r.arc(-WB, WR, WR + 0.045, -75, P['rf_a'], fw, 0.014, pt, taper=0.8)
@@ -157,6 +159,7 @@ def build(P):
         r.sph((0, hy, hz), (hr, hr * 0.95, hr), chrome if P.get('chrome_lamp', True) else black); r.sph((0, hy - 0.07, hz + 0.08), (0.052, 0.012, 0.052), lamp)
     if NORIDER: return r
     # RIDER
+    r.group = 'rider'
     sh = P['rider']
     hip = V((0, sy - 0.02, sz + 0.09)); shoulder = hip + V((0, sh['fwd'], sh['h']))
     r.cyl(hip, shoulder, 0.15, jacket, r2=0.17)
@@ -204,10 +207,34 @@ BIKES = {
         rider=dict(fwd=0.2, h=0.46)),
 }
 
+def finish(r, P):
+    objs = [o for o, g in r.items]
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in objs: o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]
+    bpy.ops.object.convert(target='MESH')
+    by = {}
+    for o, g in r.items:
+        by.setdefault(g, {}).setdefault(o.data.materials[0].name if o.data.materials else '', []).append(o)
+    root = bpy.data.objects.new('bike', None); bpy.context.scene.collection.objects.link(root)
+    WR, WB = P['wr'], P['wb']
+    pivots = {'body': V((0, 0, 0)), 'rider': V((0, 0, 0)), 'wheel_f': V((0, WB, WR)), 'wheel_r': V((0, -WB, WR))}
+    for g, mats in by.items():
+        e = bpy.data.objects.new(g, None); e.location = pivots[g]; bpy.context.scene.collection.objects.link(e)
+        e.parent = root; e.matrix_parent_inverse = root.matrix_world.inverted()
+        for mn, lst in mats.items():
+            bpy.ops.object.select_all(action='DESELECT')
+            for o in lst: o.select_set(True)
+            bpy.context.view_layer.objects.active = lst[0]
+            if len(lst) > 1: bpy.ops.object.join()
+            j = bpy.context.view_layer.objects.active; j.name = g + '_' + mn
+            j.parent = e; j.matrix_parent_inverse = e.matrix_world.inverted()
+    return root
+
 def export(name, P):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     rig = build(P)
-    rig.root.rotation_euler = (0, 0, 0)
+    finish(rig, P)
     os.makedirs(OUT, exist_ok=True)
     bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, name + '.glb'), export_format='GLB', export_apply=True, export_yup=True)
 

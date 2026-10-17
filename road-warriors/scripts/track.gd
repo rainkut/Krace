@@ -30,6 +30,8 @@ var chunks: Array = []   # [Node3D, s0, s1]
 var inters: Array = []
 var wet := false
 var night := false
+var refl: Texture2D
+var road_mats: Array[ShaderMaterial] = []
 var _win_mat: StandardMaterial3D
 var _sign_mat: StandardMaterial3D
 
@@ -322,19 +324,37 @@ func _sign_material() -> StandardMaterial3D:
 	return _sign_mat
 
 func build_visuals(parent: Node3D) -> void:
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.roughness = 0.5 if wet else 0.95
-	if wet:
-		mat.metallic_specular = 0.9
-	var puddle_mat := StandardMaterial3D.new()
-	puddle_mat.vertex_color_use_as_albedo = true
-	puddle_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	puddle_mat.roughness = 0.03
-	puddle_mat.metallic = 0.3
-	puddle_mat.metallic_specular = 1.0
-	puddle_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var mat: Material
+	var puddle_mat: Material
+	if wet and refl != null:
+		var sh: Shader = load("res://assets/road_wet.gdshader")
+		var rm := ShaderMaterial.new()
+		rm.shader = sh
+		rm.set_shader_parameter("refl", refl)
+		var pm := ShaderMaterial.new()
+		pm.shader = sh
+		pm.set_shader_parameter("refl", refl)
+		pm.set_shader_parameter("puddle", true)
+		pm.render_priority = 1
+		road_mats = [rm, pm]
+		mat = rm
+		puddle_mat = pm
+	else:
+		var sm := StandardMaterial3D.new()
+		sm.vertex_color_use_as_albedo = true
+		sm.cull_mode = BaseMaterial3D.CULL_DISABLED
+		sm.roughness = 0.5 if wet else 0.95
+		if wet:
+			sm.metallic_specular = 0.9
+		var pu := StandardMaterial3D.new()
+		pu.vertex_color_use_as_albedo = true
+		pu.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		pu.roughness = 0.03
+		pu.metallic = 0.3
+		pu.metallic_specular = 1.0
+		pu.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat = sm
+		puddle_mat = pu
 	var mumbai := str(def.get("route", "")) == "mumbai"
 	var sph_mesh := SphereMesh.new()
 	sph_mesh.radius = 0.5; sph_mesh.height = 1.0; sph_mesh.radial_segments = 7; sph_mesh.rings = 4
@@ -542,9 +562,14 @@ func build_visuals(parent: Node3D) -> void:
 						var pl := _p(i, BARRIER + 5.0, 0.0)
 						props["box"].append([Transform3D(Basis.from_euler(Vector3(0, yaw[i], 0)).scaled_local(Vector3(0.3, 9.0, 0.3)), pl + Vector3(0, 4.5, 0)), Color(0.35, 0.28, 0.22)])
 						props["box"].append([Transform3D(Basis.from_euler(Vector3(0, yaw[i], 0)).scaled_local(Vector3(3.0, 0.2, 0.2)), pl + Vector3(0, 8.6, 0)), Color(0.3, 0.24, 0.2)])
-		node.add_child(_instance(st, mat))
+		var rmi := _instance(st, mat)
+		node.add_child(rmi)
+		if refl != null:
+			rmi.layers = 2
 		if wet:
 			var pmi := _instance(st2, puddle_mat)
+			if refl != null:
+				pmi.layers = 2
 			node.add_child(pmi)
 		_add_multi(node, tree_mesh, props["tree"], Color(0.14, 0.34, 0.16), rng)
 		_add_multi(node, sph_mesh, props["sph"], Color(0.16, 0.38, 0.14), rng)

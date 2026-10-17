@@ -22,6 +22,12 @@ var traffic: Array[TrafficCar] = []
 var pool: Dictionary = {}         # kind -> Array[TrafficCar]
 var pickups: Array = []           # {s,x,kind,node,alive}
 var cam: Camera3D
+var rvp: SubViewport
+var rcam: Camera3D
+var low_q := false
+var fps_acc := 0.0
+var fps_n := 0
+var fps_t := 0.0
 var rng := RandomNumberGenerator.new()
 
 var time := 0.0
@@ -85,6 +91,7 @@ func setup(race_def: Dictionary) -> void:
 	Sfx.rain(weather == "rain")
 
 func _exit_tree() -> void:
+	get_viewport().scaling_3d_scale = 1.0
 	Sfx.engine(false)
 	Sfx.rain(false)
 	Sfx.tunnel(false)
@@ -159,11 +166,57 @@ func _build_world() -> void:
 	sun.shadow_blur = 1.5
 	add_child(sun)
 	track.wet = weather == "rain"
+	low_q = int(Save.setting("quality")) == 0
+	if low_q:
+		sun.shadow_enabled = false
+		get_viewport().scaling_3d_scale = 0.75
+	elif track.wet:
+		_build_reflection()
 	track.night = tod == "night"
 	TrafficCar.night = tod == "night"
 	track.build_visuals(self)
 	if tod != "day" or weather == "rain" or weather == "fog":
 		_build_lamps()
+
+func _build_reflection() -> void:
+	rvp = SubViewport.new()
+	rvp.size = Vector2i(800, 450)
+	rvp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	rvp.msaa_3d = Viewport.MSAA_DISABLED
+	rvp.world_3d = get_viewport().world_3d
+	add_child(rvp)
+	rcam = Camera3D.new()
+	rcam.far = 400.0
+	rcam.cull_mask = 0xFFFFD
+	rvp.add_child(rcam)
+	track.refl = rvp.get_texture()
+
+func _update_reflection() -> void:
+	var plane := player.position.y
+	var cp := cam.global_position
+	var fw := -cam.global_transform.basis.z
+	rcam.fov = cam.fov
+	rcam.global_position = Vector3(cp.x, 2.0 * plane - cp.y, cp.z)
+	rcam.look_at(Vector3(cp.x + fw.x, 2.0 * plane - (cp.y + fw.y), cp.z + fw.z), Vector3.DOWN)
+
+func _watch_fps(dt: float) -> void:
+	if low_q or time < 4.0:
+		return
+	fps_t += dt
+	fps_acc += 1.0 / maxf(dt, 0.001)
+	fps_n += 1
+	if fps_t >= 3.0:
+		var avg := fps_acc / float(fps_n)
+		fps_t = 0.0
+		fps_acc = 0.0
+		fps_n = 0
+		if avg < float(Save.setting("fps")) * 0.7:
+			low_q = true
+			get_viewport().scaling_3d_scale = 0.8
+			if rvp != null:
+				rvp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+				for m in track.road_mats:
+					m.set_shader_parameter("strength", 0.0)
 
 func _build_lamps() -> void:
 	var step := 36.0
@@ -1070,6 +1123,9 @@ func _update_camera(dt: float, snap: bool) -> void:
 	cam.rotate_object_local(Vector3(0, 0, 1), clampf(tilt, -0.2, 0.2))
 	var tfov := 62.0 + p.v * 0.13 + (9.0 if p.nitro_on else 0.0)
 	cam.fov = lerpf(cam.fov, tfov, clampf(dt * 4.0, 0.0, 1.0))
+	if rcam != null and not low_q:
+		_update_reflection()
+	_watch_fps(dt)
 
 # ---------------------------------------------------------------- debug helpers
 func dbg_text() -> String:

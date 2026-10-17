@@ -35,6 +35,7 @@ var theme_res: Theme
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	apply_fps()
 	theme_res = _make_theme()
 	bg = ColorRect.new()
 	bg.color = Color(0.05, 0.06, 0.09)
@@ -204,7 +205,10 @@ func _set_preview(bike_id: String) -> void:
 func _process(dt: float) -> void:
 	if prev_holder != null and is_instance_valid(prev_holder):
 		prev_angle += dt * 0.6
-		prev_holder.rotation.y = sin(prev_angle) * 0.45
+		prev_holder.rotation.y = prev_angle * 0.5
+		if prev_bike != null and is_instance_valid(prev_bike) and prev_bike.wheel_f != null:
+			prev_bike.wheel_f.rotation.x -= dt * 3.0
+			prev_bike.wheel_r.rotation.x -= dt * 3.0
 	if race != null and gstate in ["COUNTDOWN", "RACING"]:
 		gstate = "COUNTDOWN" if race.state == Race.RState.COUNTDOWN else "RACING"
 		if sim_id != "":
@@ -452,6 +456,9 @@ func show_garage() -> void:
 			uv.add_child(row)
 	root.add_child(_btn("BACK", show_menu, 160))
 
+func apply_fps() -> void:
+	Engine.max_fps = int(Save.setting("fps"))
+
 func show_settings(back: Callable) -> void:
 	gstate = "SETTINGS"
 	settings_back = back
@@ -473,15 +480,19 @@ func show_settings(back: Callable) -> void:
 		settings_back.call(), 200, 26))
 	hdr.add_child(_lbl("SETTINGS", 44, ACC))
 	root.add_child(hdr)
+	var scr := ScrollContainer.new()
+	scr.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scr.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	root.add_child(scr)
 	var body := HBoxContainer.new()
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 40)
-	root.add_child(body)
+	scr.add_child(body)
 	var left := VBoxContainer.new()
 	left.add_theme_constant_override("separation", 12)
 	left.custom_minimum_size = Vector2(480, 0)
 	body.add_child(left)
-	for sdef in [["sfx", "Effects volume"], ["music", "Music volume"], ["shake", "Camera shake"]]:
+	for sdef in [["sfx", "Effects volume"], ["music", "Music volume"], ["shake", "Camera shake"], ["amb", "Engine & ambience volume"]]:
 		var key: String = sdef[0]
 		left.add_child(_lbl(sdef[1], 20, DIM))
 		var sl := HSlider.new()
@@ -506,6 +517,28 @@ func show_settings(back: Callable) -> void:
 			show_settings(settings_back), 140, 18)
 		ob.disabled = cur_at == ov
 		tr.add_child(ob)
+	left.add_child(_lbl("Graphics", 20, DIM))
+	var gr := HBoxContainer.new()
+	gr.add_theme_constant_override("separation", 8)
+	left.add_child(gr)
+	for opt in [[1, "HIGH"], [0, "LOW (cooler)"]]:
+		var qv: int = opt[0]
+		var qb := _btn(opt[1], func() -> void:
+			Save.set_setting("quality", qv)
+			show_settings(settings_back), 140, 18)
+		qb.disabled = int(Save.setting("quality")) == qv
+		gr.add_child(qb)
+	left.add_child(_lbl("Frame rate", 20, DIM))
+	var fr := HBoxContainer.new()
+	fr.add_theme_constant_override("separation", 8)
+	left.add_child(fr)
+	for fv in [60, 90, 120]:
+		var fb := _btn("%d fps" % fv, func() -> void:
+			Save.set_setting("fps", fv)
+			apply_fps()
+			show_settings(settings_back), 140, 18)
+		fb.disabled = int(Save.setting("fps")) == fv
+		fr.add_child(fb)
 	left.add_child(_lbl("Difficulty", 20, DIM))
 	var dr := HBoxContainer.new()
 	dr.add_theme_constant_override("separation", 8)
@@ -573,6 +606,7 @@ func show_settings(back: Callable) -> void:
 
 func show_credits() -> void:
 	gstate = "SETTINGS"
+	settings_back = show_menu
 	_clear()
 	var dim := ColorRect.new()
 	dim.color = Color(0.03, 0.04, 0.07, 0.96)
@@ -591,6 +625,24 @@ func show_credits() -> void:
 		root.add_child(_lbl(line, 22, DIM))
 	root.add_child(_btn("BACK", show_menu, 160))
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		go_back()
+
+func go_back() -> void:
+	match gstate:
+		"SETTINGS":
+			Save.write()
+			confirm_reset = false
+			rebind_action = ""
+			settings_back.call()
+		"PAUSED":
+			resume()
+		"COUNTDOWN", "RACING":
+			pause()
+		"GARAGE", "RACE_SELECT", "FINISHED", "GAME_OVER":
+			show_menu()
+
 func _unhandled_input(e: InputEvent) -> void:
 	if rebind_action != "" and e is InputEventKey and e.pressed and not e.echo:
 		var code: int = e.physical_keycode if e.physical_keycode != KEY_NONE else e.keycode
@@ -606,10 +658,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		elif e.keycode >= KEY_F2 and e.keycode <= KEY_F6 and race != null and bool(Save.setting("debug")):
 			race.dbg_key(e.keycode)
 	if e.is_action_pressed("pause"):
-		if gstate == "COUNTDOWN" or gstate == "RACING":
-			pause()
-		elif gstate == "PAUSED":
-			resume()
+		go_back()
 
 # ---------------------------------------------------------------- race flow
 func _free_race() -> void:
